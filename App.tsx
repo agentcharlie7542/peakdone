@@ -65,18 +65,22 @@ const App: React.FC = () => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
         setFirebaseUser(fbUser);
-
-        // 프로필 로드 또는 신규 생성
-        let profile = await getUserProfile(fbUser.uid);
-        if (!profile) {
-          profile = await createUserProfile(fbUser.uid, fbUser.email!);
+        try {
+          // 프로필 로드 또는 신규 생성
+          let profile = await getUserProfile(fbUser.uid);
+          if (!profile) {
+            profile = await createUserProfile(fbUser.uid, fbUser.email!);
+          }
+          // localStorage 마이그레이션 (기존 데이터가 있을 경우)
+          await migrateFromLocalStorage(fbUser.uid, fbUser.email!);
+          setUserProfile(profile);
+        } catch (e) {
+          console.error('프로필 로드 실패:', e);
+          // 실패해도 앱이 멈추지 않도록 빈 프로필로 진행
+          setUserProfile(null);
+        } finally {
+          setProfileLoaded(true);
         }
-
-        // localStorage 마이그레이션 (기존 데이터가 있을 경우)
-        await migrateFromLocalStorage(fbUser.uid, fbUser.email!);
-
-        setUserProfile(profile);
-        setProfileLoaded(true);
       } else {
         setFirebaseUser(null);
         setUserProfile(null);

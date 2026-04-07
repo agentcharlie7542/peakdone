@@ -1,7 +1,7 @@
 
 import { db } from './firebase';
 import {
-  doc, getDoc, setDoc, updateDoc, writeBatch,
+  doc, getDoc, setDoc, writeBatch,
   onSnapshot,
 } from 'firebase/firestore';
 import { UserProfile, DailyData, RoutineConfig, LifeGoalMatrix } from '../types';
@@ -33,19 +33,20 @@ export const completeOnboarding = async (
   sleepRoutine: RoutineConfig,
   lifeGoalMatrix: LifeGoalMatrix,
 ): Promise<void> => {
-  await updateDoc(doc(db, 'users', uid), {
+  // setDoc + merge: 문서가 없어도 안전하게 생성/업데이트
+  await setDoc(doc(db, 'users', uid), {
     isOnboarded: true,
     wakeRoutine,
     sleepRoutine,
     lifeGoalMatrix,
-  });
+  }, { merge: true });
 };
 
 export const updateUserProfile = async (
   uid: string,
   updates: Partial<Pick<UserProfile, 'wakeRoutine' | 'sleepRoutine' | 'lifeGoalMatrix'>>,
 ): Promise<void> => {
-  await updateDoc(doc(db, 'users', uid), updates);
+  await setDoc(doc(db, 'users', uid), updates, { merge: true });
 };
 
 /** Real-time listener for profile changes (cross-device) */

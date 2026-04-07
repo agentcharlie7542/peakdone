@@ -17,6 +17,7 @@ const STEPS: Step[] = ['goal', 'wake', 'sleep'];
 export const OnboardingModal: React.FC<Props> = ({ uid, email, onComplete }) => {
   const [step, setStep]     = useState<Step>('goal');
   const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState('');
 
   const [goalText,        setGoalText]        = useState('');
   const [wakeTime,        setWakeTime]        = useState('07:00');
@@ -33,12 +34,16 @@ export const OnboardingModal: React.FC<Props> = ({ uid, email, onComplete }) => 
 
   const handleComplete = async () => {
     setSaving(true);
+    setError('');
     try {
       const wakeRoutine:    RoutineConfig  = { time: wakeTime,  activities: wakeActivities };
       const sleepRoutine:   RoutineConfig  = { time: sleepTime, activities: sleepActivities };
       const lifeGoalMatrix: LifeGoalMatrix = { text: goalText };
       await completeOnboarding(uid, wakeRoutine, sleepRoutine, lifeGoalMatrix);
       onComplete();
+    } catch (e: any) {
+      console.error('온보딩 저장 실패:', e);
+      setError('저장에 실패했습니다. Firestore 보안 규칙을 확인하거나 다시 시도해주세요.');
     } finally {
       setSaving(false);
     }
@@ -185,6 +190,11 @@ export const OnboardingModal: React.FC<Props> = ({ uid, email, onComplete }) => 
                 </div>
               </div>
             </>
+          )}
+
+          {/* Error message */}
+          {error && (
+            <p className="text-xs font-bold text-red-500 bg-red-50 border border-red-100 px-4 py-3 rounded-2xl">{error}</p>
           )}
 
           {/* Action button */}
