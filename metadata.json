@@ -1,0 +1,5 @@
+{
+  "name": "peakdone",
+  "description": "A sophisticated daily planner inspired by the Time Box method. Features automatic task carry-over, delay tracking, 30-minute scheduling, and AI-powered monthly performance feedback.",
+  "requestFramePermissions": []
+}
