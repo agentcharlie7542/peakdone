@@ -44,11 +44,8 @@ export const generateMonthlyFeedback = async (monthlyData: DailyData[], periodNa
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-2.5-pro",
       contents: prompt,
-      config: {
-        thinkingConfig: { thinkingBudget: 16000 }
-      }
     });
     return response.text;
   } catch (error) {
