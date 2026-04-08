@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+
+  <!-- ── 메인 홈 (한/영) ────────────────────────────────────────────────── -->
+  <url>
+    <loc>https://peakdone.app/</loc>
+    <lastmod>2025-04-08</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://peakdone.app/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://peakdone.app/en/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://peakdone.app/"/>
+    <image:image>
+      <image:loc>https://peakdone.app/og-image.png</image:loc>
+      <image:title>PeakDone — 타임박스 플래너</image:title>
+      <image:caption>엘론 머스크·하버드 공부법 기반 30분 단위 타임박스 플래너</image:caption>
+    </image:image>
+  </url>
+
+  <!-- ── 영어 홈 ──────────────────────────────────────────────────────────── -->
+  <url>
+    <loc>https://peakdone.app/en/</loc>
+    <lastmod>2025-04-08</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://peakdone.app/en/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://peakdone.app/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://peakdone.app/"/>
+  </url>
+
+  <!-- ── 타임박스 플래너 랜딩 (한) ─────────────────────────────────────── -->
+  <url>
+    <loc>https://peakdone.app/timebox-planner</loc>
+    <lastmod>2025-04-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://peakdone.app/timebox-planner"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://peakdone.app/en/timebox-planner"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://peakdone.app/timebox-planner"/>
+  </url>
+
+  <!-- ── 타임박스 플래너 랜딩 (영) ─────────────────────────────────────── -->
+  <url>
+    <loc>https://peakdone.app/en/timebox-planner</loc>
+    <lastmod>2025-04-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://peakdone.app/en/timebox-planner"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://peakdone.app/timebox-planner"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://peakdone.app/timebox-planner"/>
+  </url>
+
+  <!-- ── 블로그: 하버드 공부법 ──────────────────────────────────────────── -->
+  <url>
+    <loc>https://peakdone.app/blog/harvard-study-method</loc>
+    <lastmod>2025-04-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://peakdone.app/blog/harvard-study-method"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://peakdone.app/en/blog/harvard-study-method"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://peakdone.app/blog/harvard-study-method"/>
+  </url>
+
+  <!-- ── 블로그: 엘론 머스크 타임박스 ──────────────────────────────────── -->
+  <url>
+    <loc>https://peakdone.app/blog/elon-musk-time-boxing</loc>
+    <lastmod>2025-04-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://peakdone.app/blog/elon-musk-time-boxing"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://peakdone.app/en/blog/elon-musk-time-boxing"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://peakdone.app/blog/elon-musk-time-boxing"/>
+  </url>
+
+</urlset>

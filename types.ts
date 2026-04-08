@@ -15,6 +15,7 @@ export interface Task {
   date: string;
   originalDate: string;
   delayDays: number;
+  delayed?: boolean; // 지연 상태 플래그
   memo?: string;
   isArchived?: boolean;
 }
@@ -38,6 +39,12 @@ export interface UserProfile {
   wakeRoutine: RoutineConfig;
   sleepRoutine: RoutineConfig;
   lifeGoalMatrix: LifeGoalMatrix;
+  // 리포트 알림 설정 (Google API 자동화)
+  reportNotification?: {
+    weekly: boolean;
+    monthly: boolean;
+  };
+  notificationToken?: string; // Firebase Cloud Messaging
 }
 
 // ─── Daily Data (Firestore: users/{uid}/dailyData/{date}) ──────────────────

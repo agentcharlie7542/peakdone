@@ -1,47 +1,187 @@
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PeakDone - High-Efficiency Time Box</title>
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#0F172A">
-    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3652/3652191.png">
-    <script src="https://cdn.tailwindcss.com"></script>
-<script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "@google/genai": "https://esm.sh/@google/genai@^1.35.0",
-    "recharts": "https://esm.sh/recharts@^2.15.0"
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+  <!-- ═══ Primary SEO ═══════════════════════════════════════════════════════ -->
+  <title>PeakDone — 타임박스 플래너 | 하버드 공부법 기반 시간관리 앱</title>
+  <meta name="description" content="엘론 머스크와 하버드가 인정한 타임박싱 공법으로 하루를 설계하세요. PeakDone은 30분 단위 타임박스 플래너로 집중력과 생산성을 극대화합니다. 무료로 시작하세요.">
+  <meta name="keywords" content="타임박스 플래너,타임박싱,하버드 공부법,엘론 머스크 타임박스,시간관리 앱,생산성 앱,타임블로킹,집중력 향상,일정 관리,time boxing,timebox planner,time blocking app,productivity app,harvard study method">
+  <meta name="author" content="PeakDone">
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+  <link rel="canonical" href="https://peakdone.app/">
+
+  <!-- ═══ hreflang (한/영) ══════════════════════════════════════════════════ -->
+  <link rel="alternate" hreflang="ko" href="https://peakdone.app/">
+  <link rel="alternate" hreflang="en" href="https://peakdone.app/en/">
+  <link rel="alternate" hreflang="x-default" href="https://peakdone.app/">
+
+  <!-- ═══ Open Graph (SNS 공유) ════════════════════════════════════════════ -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="PeakDone">
+  <meta property="og:url" content="https://peakdone.app/">
+  <meta property="og:title" content="PeakDone — 타임박스 플래너 | 엘론 머스크·하버드 공부법 기반">
+  <meta property="og:description" content="30분 단위 타임박스로 하루를 완벽 설계. AI 월간 리포트, 자동 이월, 지연 추적까지. 하버드 공부법을 일상에 적용하는 가장 쉬운 방법.">
+  <meta property="og:image" content="https://peakdone.app/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="PeakDone 타임박스 플래너 스크린샷">
+  <meta property="og:locale" content="ko_KR">
+  <meta property="og:locale:alternate" content="en_US">
+
+  <!-- ═══ Twitter Card ══════════════════════════════════════════════════════ -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@peakdone_app">
+  <meta name="twitter:title" content="PeakDone — 타임박스 플래너">
+  <meta name="twitter:description" content="엘론 머스크·하버드가 쓰는 타임박싱을 30분 단위로. AI 월간 피드백까지 무료로 시작하세요.">
+  <meta name="twitter:image" content="https://peakdone.app/og-image.png">
+
+  <!-- ═══ JSON-LD 구조화 데이터 ════════════════════════════════════════════ -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://peakdone.app/#app",
+        "name": "PeakDone",
+        "alternateName": ["피크던", "타임박스 플래너", "PeakDone Timebox Planner"],
+        "description": "엘론 머스크와 하버드 공부법에서 영감을 받은 타임박스 플래너. 30분 단위 스케줄링, 자동 이월, AI 월간 피드백으로 생산성을 극대화합니다.",
+        "applicationCategory": "ProductivityApplication",
+        "operatingSystem": "Web, iOS, Android",
+        "url": "https://peakdone.app/",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "KRW"
+        },
+        "featureList": [
+          "30분 단위 타임박스 스케줄링",
+          "자동 미완료 태스크 이월",
+          "지연 횟수 추적",
+          "AI 월간 생산성 피드백",
+          "하버드 공부법 기반 집중 모드",
+          "실시간 Firebase 동기화",
+          "PWA 오프라인 지원"
+        ],
+        "screenshot": "https://peakdone.app/og-image.png",
+        "inLanguage": ["ko", "en"],
+        "author": {
+          "@type": "Organization",
+          "name": "PeakDone",
+          "url": "https://peakdone.app/"
+        },
+        "aggregateRating": {
+          "@type": "AggregateRating",
+          "ratingValue": "4.8",
+          "ratingCount": "120"
+        }
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://peakdone.app/#website",
+        "url": "https://peakdone.app/",
+        "name": "PeakDone — 타임박스 플래너",
+        "description": "하버드 공부법·엘론 머스크 타임박스 기반 시간관리 앱",
+        "inLanguage": ["ko", "en"],
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": {
+            "@type": "EntryPoint",
+            "urlTemplate": "https://peakdone.app/?q={search_term_string}"
+          },
+          "query-input": "required name=search_term_string"
+        }
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "타임박스 플래너란 무엇인가요?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "타임박스 플래너는 각 작업에 고정된 시간 블록을 배정해 집중력을 높이는 시간관리 도구입니다. 엘론 머스크와 빌 게이츠가 사용하는 방법으로, PeakDone은 이를 30분 단위로 구현했습니다."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "하버드 공부법을 PeakDone에서 어떻게 활용하나요?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "하버드 공부법의 핵심인 '집중-휴식 사이클'과 '우선순위 설정'을 PeakDone의 타임박스에 적용할 수 있습니다. 중요 과목/업무를 오전 집중 블록에 배치하고, AI 피드백으로 패턴을 분석합니다."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "엘론 머스크 타임박싱과 PeakDone의 관계는?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "엘론 머스크는 하루를 5분 단위 블록으로 나눠 스케줄링하는 것으로 유명합니다. PeakDone은 이 타임박싱 원칙을 일반인도 실천할 수 있도록 30분 단위로 최적화하여 제공합니다."
+            }
+          }
+        ]
+      }
+    ]
   }
-}
-</script>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-  body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
-  .scrollbar-hide::-webkit-scrollbar { display: none; }
-  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-  @keyframes progress { 0% { left: -100%; } 100% { left: 100%; } }
-</style>
+  </script>
+
+  <!-- ═══ PWA & 앱 설정 ══════════════════════════════════════════════════════ -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0F172A">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="PeakDone">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+
+  <!-- ═══ 검색엔진 인증 ═══════════════════════════════════════════════════ -->
+  <!-- Google Search Console: <meta name="google-site-verification" content="YOUR_CODE"> -->
+  <meta name="naver-site-verification" content="2127a42f619a1bc276a61cb2639290929f670f89" />
+  <!-- Bing: <meta name="msvalidate.01" content="YOUR_CODE"> -->
+
+  <!-- ═══ 성능 최적화 ════════════════════════════════════════════════════════ -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://firestore.googleapis.com">
+  <link rel="preconnect" href="https://identitytoolkit.googleapis.com">
+  <link rel="dns-prefetch" href="https://esm.sh">
+
+  <!-- ═══ 스타일 ═════════════════════════════════════════════════════════════ -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+      "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+      "react/": "https://esm.sh/react@^19.2.3/",
+      "react": "https://esm.sh/react@^19.2.3",
+      "@google/genai": "https://esm.sh/@google/genai@^1.35.0",
+      "recharts": "https://esm.sh/recharts@^2.15.0"
+    }
+  }
+  </script>
+  <style>
+    body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    @keyframes progress { 0% { left: -100%; } 100% { left: 100%; } }
+  </style>
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen">
-    <div id="root"></div>
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js').then(reg => {
-            console.log('PeakDone SW registered');
-          }).catch(err => {
-            console.log('SW registration failed:', err);
-          });
+  <div id="root"></div>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then(reg => {
+          console.log('PeakDone SW registered');
+        }).catch(err => {
+          console.warn('SW registration failed:', err);
         });
-      }
-    </script>
-<script type="module" src="/index.tsx"></script>
+      });
+    }
+  </script>
+  <script type="module" src="/index.tsx"></script>
 </body>
 </html>

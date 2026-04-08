@@ -1,0 +1,15 @@
+# PeakDone robots.txt
+# 네이버/구글 모두 호환
+
+User-agent: *
+Allow: /
+
+# Disallow 경로들
+Disallow: /api/
+Disallow: /.well-known/
+
+# 사이트맵
+Sitemap: https://peakdone.app/sitemap.xml
+
+# 크롤링 속도
+Crawl-delay: 1
