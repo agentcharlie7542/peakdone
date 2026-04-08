@@ -5,7 +5,7 @@ import { auth } from './services/firebase';
 import {
   getUserProfile, createUserProfile, subscribeToUserProfile,
   subscribeToDailyData, getDailyData, persistDailyData,
-  migrateFromLocalStorage,
+  migrateFromLocalStorage, getDateRangeData,
 } from './services/firestoreService';
 import { Layout }           from './components/Layout';
 import { Dashboard }        from './components/Dashboard';
@@ -291,21 +291,22 @@ const App: React.FC = () => {
   // ── AI Report ─────────────────────────────────────────────────────────────
 
   const handleGenerateReport = async () => {
+    if (!firebaseUser) return;
     setIsLoadingFeedback(true);
     setReportFeedback(null);
     try {
       const days = viewMode === 'weekly' ? 7 : 30;
-      const dataSet = Object.values(dataCache)
-        .filter(Boolean)
-        .slice(0, days);
+
+      // Firestore에서 지난 N일치 데이터 직접 조회
+      const dataSet = await getDateRangeData(firebaseUser.uid, days);
 
       if (dataSet.length === 0) {
-        setReportFeedback('분석할 데이터가 없습니다. 최소 1일 이상의 데이터가 필요합니다.');
+        setReportFeedback('분석할 데이터가 없습니다.\n\n최소 1일 이상 태스크를 입력하고 완료 여부를 체크한 후 다시 시도해주세요.');
         return;
       }
 
-      const report = await generateMonthlyFeedback(dataSet as any);
-      setReportFeedback(report);
+      const report = await generateMonthlyFeedback(dataSet, viewMode === 'weekly' ? '주간' : '월간');
+      setReportFeedback(report ?? '리포트 생성에 실패했습니다.');
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
       console.error('❌ 리포트 생성 실패:', errorMsg);

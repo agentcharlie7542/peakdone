@@ -12,8 +12,12 @@ export const generateFeedback = async (
   periodData: DailyData[],
   periodType: "weekly" | "monthly" = "monthly"
 ): Promise<string> => {
-  // Vite 환경 변수에서 API 키 읽기
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  // API 키: 여러 경로로 읽기 (Vite 빌드 / 직접 실행 모두 호환)
+  const apiKey =
+    (typeof __GEMINI_API_KEY__ !== 'undefined' && __GEMINI_API_KEY__) ||
+    import.meta.env?.VITE_GEMINI_API_KEY ||
+    (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ||
+    '';
 
   if (!apiKey) {
     throw new Error(

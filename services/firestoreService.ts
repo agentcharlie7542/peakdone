@@ -70,6 +70,31 @@ export const persistDailyData = async (uid: string, data: DailyData): Promise<vo
   await setDoc(doc(db, 'users', uid, 'dailyData', data.date), data);
 };
 
+/**
+ * 지난 N일치 DailyData를 Firestore에서 직접 조회
+ * 리포트 생성 시 dataCache 대신 사용
+ */
+export const getDateRangeData = async (uid: string, days: number): Promise<DailyData[]> => {
+  const results: DailyData[] = [];
+  const today = new Date();
+
+  const fetchPromises = Array.from({ length: days }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const dateStr = d.toLocaleDateString('sv').split('T')[0]; // YYYY-MM-DD
+    return getDailyData(uid, dateStr);
+  });
+
+  const snapshots = await Promise.all(fetchPromises);
+  snapshots.forEach((data) => {
+    if (data && data.tasks && data.tasks.length > 0) {
+      results.push(data);
+    }
+  });
+
+  return results;
+};
+
 /** Real-time listener for a single date's data (cross-device) */
 export const subscribeToDailyData = (
   uid: string,
