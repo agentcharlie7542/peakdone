@@ -120,7 +120,7 @@ ${JSON.stringify(tasksByDate, null, 2)}
     console.log("🚀 Gemini API 호출 시작...");
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: {
@@ -162,27 +162,19 @@ ${JSON.stringify(tasksByDate, null, 2)}
 
     return responseText;
   } catch (error) {
-    console.error("❌ 리포트 생성 중 오류:", error);
-
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `리포트 생성에 실패했습니다.\n\n` +
-      `오류: ${errorMessage}\n\n` +
-      `📋 확인 사항:\n` +
-      `• Google Gemini API 키가 올바른가?\n` +
-      `• .env.local에 VITE_GEMINI_API_KEY가 설정되었는가?\n` +
-      `• 개발 서버를 재시작했는가? (npm run dev)\n` +
-      `• API 발급: https://aistudio.google.com/`
-    );
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("❌ 리포트 생성 중 오류:", msg);
+    throw error; // 원본 에러를 그대로 전달 (App.tsx에서 메시지 표시)
   }
 };
 
-// 호환성 함수
+// 호환성 함수 — periodName이 "주간"이면 weekly, 나머지는 monthly
 export const generateMonthlyFeedback = async (
-  monthlyData: DailyData[],
-  _periodName?: string
+  data: DailyData[],
+  periodName?: string
 ) => {
-  return generateFeedback(monthlyData, "monthly");
+  const type = periodName === "주간" ? "weekly" : "monthly";
+  return generateFeedback(data, type);
 };
 
 export const generateWeeklyFeedback = async (weeklyData: DailyData[]) => {
