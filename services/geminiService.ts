@@ -12,23 +12,12 @@ export const generateFeedback = async (
   periodData: DailyData[],
   periodType: "weekly" | "monthly" = "monthly"
 ): Promise<string> => {
-  // API 키: 여러 경로로 읽기 (Vite 빌드 / 직접 실행 모두 호환)
+  // API 키 (Vite 빌드 환경변수 → 직접 설정 순으로 fallback)
   const apiKey =
     (typeof __GEMINI_API_KEY__ !== 'undefined' && __GEMINI_API_KEY__) ||
     import.meta.env?.VITE_GEMINI_API_KEY ||
-    (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ||
-    '';
+    'AIzaSyACKMDIcJKkjRwlDWyErAk2mS62dlVB6H4';
 
-  if (!apiKey) {
-    throw new Error(
-      "❌ Google Gemini API 키가 설정되지 않았습니다.\n\n" +
-      "✅ 해결 방법:\n" +
-      "1. Google AI Studio: https://aistudio.google.com/\n" +
-      "2. API 키 생성 후 .env.local에 추가:\n   VITE_GEMINI_API_KEY=YOUR_API_KEY\n" +
-      "3. 개발 서버 재시작: npm run dev\n" +
-      "4. 캐시 초기화: 브라우저 개발자도구 → NetworkTab → Disable Cache 체크"
-    );
-  }
 
   const periodName = periodType === "weekly" ? "주간" : "월간";
 
