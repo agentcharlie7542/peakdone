@@ -12,11 +12,11 @@ export const generateFeedback = async (
   periodData: DailyData[],
   periodType: "weekly" | "monthly" = "monthly"
 ): Promise<string> => {
-  // API 키 (Vite 빌드 환경변수 → 직접 설정 순으로 fallback)
+  // API 키 — Cloudflare Pages 환경변수에서 주입 (절대 코드에 직접 넣지 마세요)
   const apiKey =
     (typeof __GEMINI_API_KEY__ !== 'undefined' && __GEMINI_API_KEY__) ||
     import.meta.env?.VITE_GEMINI_API_KEY ||
-    'AIzaSyACKMDIcJKkjRwlDWyErAk2mS62dlVB6H4';
+    '';
 
 
   const periodName = periodType === "weekly" ? "주간" : "월간";
