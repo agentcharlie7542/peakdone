@@ -5,13 +5,29 @@ import { DailyData } from "../types";
 /**
  * 성과 분석 리포트 생성기 (Weekly / Monthly)
  * Google Gemini API를 통한 지능형 분석
+ *
+ * 사용 방법:
+ * const report = await generateFeedback(weeklyData, "weekly");
  */
 
 export const generateFeedback = async (
   periodData: DailyData[],
   periodType: "weekly" | "monthly" = "monthly"
 ) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // import.meta.env.VITE_GEMINI_API_KEY 사용 (Vite 환경 변수)
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error(
+      "❌ Gemini API 키가 설정되지 않았습니다.\n" +
+      "해결 방법:\n" +
+      "1. .env.local 파일에 VITE_GEMINI_API_KEY=YOUR_API_KEY 추가\n" +
+      "2. 또는 vite.config.ts의 define 설정 확인\n" +
+      "3. 개발 서버 재시작: npm run dev"
+    );
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   const periodName = periodType === "weekly" ? "주간" : "월간";
 
   // 데이터 요약 계산
