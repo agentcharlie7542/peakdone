@@ -12,7 +12,7 @@ import { Dashboard }        from './components/Dashboard';
 import { OnboardingModal }  from './components/OnboardingModal';
 import { Task, TaskType, DailyData, UserProfile } from './types';
 import { TIME_SLOTS }       from './constants';
-import { generateMonthlyFeedback } from './services/claudeService';
+import { generateMonthlyFeedback } from './services/geminiService';
 import {
   CheckCircle2, Circle, ChevronLeft, ChevronRight, Clock,
   Plus, Trash2, TrendingUp, LayoutDashboard, Zap, Target,
@@ -298,10 +298,18 @@ const App: React.FC = () => {
       const dataSet = Object.values(dataCache)
         .filter(Boolean)
         .slice(0, days);
-      const report = await generateMonthlyFeedback(dataSet as any, viewMode.toUpperCase());
+
+      if (dataSet.length === 0) {
+        setReportFeedback('분석할 데이터가 없습니다. 최소 1일 이상의 데이터가 필요합니다.');
+        return;
+      }
+
+      const report = await generateMonthlyFeedback(dataSet as any);
       setReportFeedback(report);
-    } catch {
-      setReportFeedback('리포트 생성에 실패했습니다.');
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
+      console.error('❌ 리포트 생성 실패:', errorMsg);
+      setReportFeedback(errorMsg);
     } finally {
       setIsLoadingFeedback(false);
     }

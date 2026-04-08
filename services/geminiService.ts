@@ -1,10 +1,8 @@
-
-import { GoogleGenAI } from "@google/genai";
 import { DailyData } from "../types";
 
 /**
- * 성과 분석 리포트 생성기 (Weekly / Monthly)
- * Google Gemini API를 통한 지능형 분석
+ * Google Gemini API (Fetch)를 통한 성과 분석 리포트 생성 (Weekly / Monthly)
+ * 브라우저 환경에서 직접 작동
  *
  * 사용 방법:
  * const report = await generateFeedback(weeklyData, "weekly");
@@ -13,21 +11,21 @@ import { DailyData } from "../types";
 export const generateFeedback = async (
   periodData: DailyData[],
   periodType: "weekly" | "monthly" = "monthly"
-) => {
-  // import.meta.env.VITE_GEMINI_API_KEY 사용 (Vite 환경 변수)
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+): Promise<string> => {
+  // Vite 환경 변수에서 API 키 읽기
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
   if (!apiKey) {
     throw new Error(
-      "❌ Gemini API 키가 설정되지 않았습니다.\n" +
-      "해결 방법:\n" +
-      "1. .env.local 파일에 VITE_GEMINI_API_KEY=YOUR_API_KEY 추가\n" +
-      "2. 또는 vite.config.ts의 define 설정 확인\n" +
-      "3. 개발 서버 재시작: npm run dev"
+      "❌ Google Gemini API 키가 설정되지 않았습니다.\n\n" +
+      "✅ 해결 방법:\n" +
+      "1. Google AI Studio: https://aistudio.google.com/\n" +
+      "2. API 키 생성 후 .env.local에 추가:\n   VITE_GEMINI_API_KEY=YOUR_API_KEY\n" +
+      "3. 개발 서버 재시작: npm run dev\n" +
+      "4. 캐시 초기화: 브라우저 개발자도구 → NetworkTab → Disable Cache 체크"
     );
   }
 
-  const ai = new GoogleGenAI({ apiKey });
   const periodName = periodType === "weekly" ? "주간" : "월간";
 
   // 데이터 요약 계산
@@ -69,10 +67,11 @@ export const generateFeedback = async (
   );
 
   const prompt = `
-당신은 세계 최고의 생산성 코치이자 성과 분석 전문가입니다. 사용자의 ${periodName} 업무 데이터를 깊이 있게 분석하여 전문적인 PeakDone 성과 리포트를 작성하세요.
+당신은 세계 최고의 생산성 코치이자 성과 분석 전문가입니다.
+사용자의 업무 데이터를 깊이 있게 분석하여 전문적이고 영감을 주는 PeakDone 성과 리포트를 작성합니다.
 
-[📊 데이터셋]
-- 분석 기간: ${periodName} (${periodData.length}일)
+[📊 분석 데이터]
+- 기간: ${periodName} (${periodData.length}일)
 - 설정된 업무: ${totalTasks}건
 - 완료 업무: ${completedTasks}건 (완성율: ${completionRate}%)
 - 지연된 업무: ${delayedTasks.length}건
@@ -85,59 +84,110 @@ ${Object.entries(tasksByCategory)
   )
   .join("\n")}
 
-[상세 로그]
+[상세 업무 로그]
 ${JSON.stringify(tasksByDate, null, 2)}
 
-[📋 리포트 구성 요청 사항]
+[📋 리포트 작성 요청사항]
 
-1. **💪 성과 요약**:
-   - 완성율을 바탕으로 이번 ${periodName} 성과를 평가
-   - 가장 높은 생산성을 보인 날과 날씨(패턴) 분석
-   - 지연 업무 패턴 발견 (시간대, 요일, 업무 유형별 분석)
+이하 내용을 포함하여 1500자 이상의 상세 분석 리포트를 작성해주세요:
 
-2. **📈 강점 & 약점 분석**:
+1. **💪 성과 요약** (250자)
+   - 이번 ${periodName} 완성율을 평가
+   - 가장 높은 생산성을 보인 날 분석
+   - 지연 업무 발생 패턴
+
+2. **📈 강점 & 약점 분석** (400자)
    - 사용자가 가장 잘하는 업무 유형 3가지
    - 개선이 필요한 영역 3가지
-   - 데이터 기반 인사이트
+   - 각각에 대한 데이터 기반 인사이트
 
-3. **⚡ 성과 향상 전략** (다음 ${periodName}에 적용할 수 있는 구체적인 3가지):
+3. **⚡ 성과 향상 전략** (350자)
+   다음 ${periodName}에 즉시 적용 가능한 3가지 구체적 전략:
    - 시간 배치 전략
-   - 업무 우선순위 재정렬 방안
+   - 우선순위 재정렬 방안
    - 집중력 유지 팁
 
-4. **🎯 황금 시간대 발견**:
-   - 당신의 최고 생산성 시간대는 언제인가?
-   - 이 시간에 우선순위가 높은 업무를 배치하는 방법
+4. **🎯 황금 시간대 & 최적 업무 배치** (250자)
+   - 당신의 최고 생산성 시간대는?
+   - 이 시간에 우선순위가 높은 업무를 배치하는 구체적 방법
 
-5. **🏆 종합 코칭 코멘트**:
+5. **🏆 종합 코칭 코멘트** (150자)
    - 긍정적 독려
    - 다음 목표 제시
-   - 5줄 이내로 영감주는 메시지
+   - 5줄 이내 영감주는 메시지
 
-[📝 출력 가이드]
+[📝 출력 형식]
 - Markdown 형식 사용
-- 이모지와 시각적 구분 활용
+- 이모지와 시각적 구분 활용 (# ##, **굵게** 등)
 - 차트: [████████░░] 80% 형식
-- 한국어, 전문적이고 설득력 있는 톤
-- 총 1500자 이상 상세 분석
-  `;
+- 전문적이고 설득력 있는, 따뜻한 톤
+`;
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
-      contents: prompt,
-    });
-    return response.text;
+    console.log("🚀 Gemini API 호출 시작...");
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt,
+                },
+              ],
+            },
+          ],
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("❌ Gemini API 에러:", response.status, errorData);
+      throw new Error(
+        `Gemini API 오류 (${response.status}):\n${
+          errorData.error?.message || JSON.stringify(errorData)
+        }`
+      );
+    }
+
+    const data = await response.json();
+    console.log("✅ Gemini API 응답 성공");
+
+    // Gemini 응답에서 텍스트 추출
+    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!responseText) {
+      throw new Error("Gemini API 응답에서 텍스트를 찾을 수 없습니다.");
+    }
+
+    return responseText;
   } catch (error) {
-    console.error("Gemini API Error:", error);
-    return `분석 리포트를 생성하는 중 오류가 발생했습니다. API 키를 확인하거나 나중에 다시 시도해주세요.\n\n오류: ${error instanceof Error ? error.message : "Unknown error"}`;
+    console.error("❌ 리포트 생성 중 오류:", error);
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `리포트 생성에 실패했습니다.\n\n` +
+      `오류: ${errorMessage}\n\n` +
+      `📋 확인 사항:\n` +
+      `• Google Gemini API 키가 올바른가?\n` +
+      `• .env.local에 VITE_GEMINI_API_KEY가 설정되었는가?\n` +
+      `• 개발 서버를 재시작했는가? (npm run dev)\n` +
+      `• API 발급: https://aistudio.google.com/`
+    );
   }
 };
 
-// 하위 호환성 함수
+// 호환성 함수
 export const generateMonthlyFeedback = async (
   monthlyData: DailyData[],
-  periodName: string = "Monthly"
+  _periodName?: string
 ) => {
   return generateFeedback(monthlyData, "monthly");
 };
