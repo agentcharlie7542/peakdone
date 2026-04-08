@@ -610,9 +610,9 @@ const App: React.FC = () => {
                 {TIME_SLOTS.map((slot) => {
                   const tasksForSlot = dailyData.tasks.filter((t) => t.timeSlot === slot);
                   return (
-                    <div key={slot} className="flex min-h-[90px] group/slot transition-colors hover:bg-white">
-                      <div className="w-20 shrink-0 p-4 text-[11px] font-black text-slate-400 border-r border-slate-50 flex items-center justify-center bg-white">{slot}</div>
-                      <div className="flex-1 p-4">
+                    <div key={slot} className="flex min-h-[44px] group/slot transition-colors hover:bg-white">
+                      <div className="w-20 shrink-0 px-2 py-1.5 text-[11px] font-black text-slate-400 border-r border-slate-50 flex items-center justify-center bg-white">{slot}</div>
+                      <div className="flex-1 px-3 py-1.5">
                         <div className="flex flex-col gap-3">
                           {tasksForSlot.map((task) => (
                             <div
