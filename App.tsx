@@ -12,7 +12,7 @@ import { Dashboard }        from './components/Dashboard';
 import { OnboardingModal }  from './components/OnboardingModal';
 import { Task, TaskType, DailyData, UserProfile } from './types';
 import { TIME_SLOTS }       from './constants';
-import { generateMonthlyFeedback } from './services/geminiService';
+import { generateMonthlyFeedback } from './services/claudeService';
 import {
   CheckCircle2, Circle, ChevronLeft, ChevronRight, Clock,
   Plus, Trash2, TrendingUp, LayoutDashboard, Zap, Target,
