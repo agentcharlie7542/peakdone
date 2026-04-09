@@ -59,6 +59,9 @@ const App: React.FC = () => {
   const [authError,     setAuthError]     = useState('');
   const [isAuthLoading, setIsAuthLoading] = useState(false);
 
+  // 자동 이월 중복 실행 방지 플래그
+  const isCarryingOver = React.useRef<boolean>(false);
+
   // ── 1. Firebase Auth 상태 감지 ────────────────────────────────────────────
 
   useEffect(() => {
@@ -108,43 +111,67 @@ const App: React.FC = () => {
     if (!firebaseUser || !userProfile?.isOnboarded) return;
 
     setDailyData(null);
+    // 날짜 변경 시 이월 플래그 초기화
+    isCarryingOver.current = false;
 
     const unsubscribe = subscribeToDailyData(firebaseUser.uid, currentDate, async (data) => {
       // 오늘 데이터가 없으면 → 전날 미완료 태스크를 이월
       if (!data) {
-        const yesterday = new Date(currentDate);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yStr = yesterday.toLocaleDateString('sv').split('T')[0];
-        const prevData = await getDailyData(firebaseUser.uid, yStr);
+        // 이석 실행 중이면 스킵 (중복 이월 방지)
+        if (isCarryingOver.current) {
+          console.log('⏳ 자동 이월 이미 진행 중, 스킵');
+          return;
+        }
 
-        const carried: Task[] = [];
-        if (prevData) {
-          prevData.tasks
-            .filter((t) => !t.completed && !t.isArchived)
-            .forEach((t) => {
-              carried.push({
-                ...t,
-                id: Math.random().toString(36).substr(2, 9), // 새 ID
-                date: currentDate,
-                delayDays: (t.delayDays ?? 0) + 1,
-                delayed: true,
-                completed: false,
+        isCarryingOver.current = true;
+
+        try {
+          const yesterday = new Date(currentDate);
+          yesterday.setDate(yesterday.getDate() - 1);
+          const yStr = yesterday.toLocaleDateString('sv').split('T')[0];
+
+          console.log(`🔄 자동 이월 시작: ${yStr} → ${currentDate}`);
+
+          const prevData = await getDailyData(firebaseUser.uid, yStr);
+
+          const carried: Task[] = [];
+          if (prevData) {
+            prevData.tasks
+              .filter((t) => !t.completed && !t.isArchived)
+              .forEach((t) => {
+                carried.push({
+                  ...t,
+                  id: crypto.randomUUID(), // 강력한 UUID 사용
+                  date: currentDate,
+                  delayDays: (t.delayDays ?? 0) + 1,
+                  delayed: true,
+                  completed: false,
+                });
               });
-            });
+          }
+
+          const newDay: DailyData = {
+            ...emptyDay(currentDate),
+            tasks: carried,
+          };
+
+          // 이월 태스크가 있으면 Firestore에 저장
+          if (carried.length > 0) {
+            await persistDailyData(firebaseUser.uid, newDay);
+            console.log(`✅ 자동 이월 완료: ${carried.length}개 작업 이월됨`);
+          }
+
+          setDailyData(newDay);
+          setDataCache((prev) => ({ ...prev, [currentDate]: newDay }));
+        } catch (error) {
+          console.error('❌ 자동 이월 중 에러:', error);
+          // 에러 발생 시 빈 날짜로 설정 (사용자가 수동으로 작업 추가 가능)
+          const emptyNewDay = emptyDay(currentDate);
+          setDailyData(emptyNewDay);
+          setDataCache((prev) => ({ ...prev, [currentDate]: emptyNewDay }));
+        } finally {
+          isCarryingOver.current = false;
         }
-
-        const newDay: DailyData = {
-          ...emptyDay(currentDate),
-          tasks: carried,
-        };
-
-        // 이월 태스크가 있으면 Firestore에 저장
-        if (carried.length > 0) {
-          await persistDailyData(firebaseUser.uid, newDay);
-        }
-
-        setDailyData(newDay);
-        setDataCache((prev) => ({ ...prev, [currentDate]: newDay }));
       } else {
         setDailyData(data);
         setDataCache((prev) => ({ ...prev, [currentDate]: data }));
@@ -154,7 +181,7 @@ const App: React.FC = () => {
     return unsubscribe;
   }, [firebaseUser?.uid, currentDate, userProfile?.isOnboarded]);
 
-  // ── 4. 주간/월간 뷰에 필요한 과거 날짜 데이터 패치 ──────────────────────
+  // ── 4. 주간/월간 뷰에 필요한 과거 날짜 데이터 패치 (부분 성공 지원) ────────
 
   useEffect(() => {
     if (!firebaseUser) return;
@@ -166,14 +193,44 @@ const App: React.FC = () => {
       d.setDate(base.getDate() - i);
       dates.push(d.toLocaleDateString('sv').split('T')[0]);
     }
+
+    // viewMode 변경 시 해당 범위의 캐시 무효화 (크로스 디바이스 동기화)
+    if (viewMode !== 'daily') {
+      const newCache = { ...dataCache };
+      dates.forEach((d) => {
+        delete newCache[d]; // 캐시 제거 → 재로드
+      });
+      setDataCache(newCache);
+    }
+
     const missing = dates.filter((d) => !dataCache[d]);
     if (!missing.length) return;
 
-    Promise.all(missing.map((d) => getDailyData(firebaseUser.uid, d))).then((results) => {
-      const updates: Record<string, DailyData> = {};
-      missing.forEach((d, i) => { if (results[i]) updates[d] = results[i]!; });
-      setDataCache((prev) => ({ ...prev, ...updates }));
-    });
+    console.log(`📍 ${viewMode.toUpperCase()} 모드: ${missing.length}개 날짜 데이터 로드 중...`);
+
+    Promise.allSettled(missing.map((d) => getDailyData(firebaseUser.uid, d)))
+      .then((results) => {
+        const updates: Record<string, DailyData> = {};
+        const errors: string[] = [];
+
+        missing.forEach((d, i) => {
+          const result = results[i];
+          if (result.status === 'fulfilled' && result.value) {
+            updates[d] = result.value;
+          } else if (result.status === 'rejected') {
+            errors.push(d);
+          }
+        });
+
+        if (errors.length > 0) {
+          console.warn(`⚠️ ${errors.length}개 날짜의 데이터 로드 실패:`, errors);
+        }
+
+        if (Object.keys(updates).length > 0) {
+          setDataCache((prev) => ({ ...prev, ...updates }));
+          console.log(`✅ ${Object.keys(updates).length}개 날짜의 데이터 로드 완료`);
+        }
+      });
   }, [currentDate, viewMode, firebaseUser?.uid]);
 
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -232,20 +289,35 @@ const App: React.FC = () => {
     }
   };
 
-  // ── 데이터 저장 (Firestore write + Optimistic UI) ────────────────────────
+  // ── 데이터 저장 (Firestore write + Optimistic UI + 에러 롤백) ─────────────
 
   const saveDailyData = useCallback(async (data: DailyData) => {
     if (!firebaseUser) return;
+
+    // 이전 상태 저장 (롤백용)
+    const previousData = dailyData;
+    const previousCache = dataCache;
+
     const updated = { ...data, updatedAt: Date.now() };
     setDailyData(updated);
     setDataCache((prev) => ({ ...prev, [data.date]: updated }));
     setIsSyncing(true);
+
     try {
       await persistDailyData(firebaseUser.uid, updated);
+      console.log('✅ 데이터 저장 성공:', data.date);
+    } catch (error) {
+      console.error('❌ 데이터 저장 실패:', error);
+      // 이전 상태로 롤백
+      if (previousData) setDailyData(previousData);
+      setDataCache(previousCache);
+      // 사용자에게 에러 피드백
+      const errorMsg = error instanceof Error ? error.message : '데이터 저장 중 오류가 발생했습니다';
+      alert(`⚠️ 저장 실패: ${errorMsg}\n다시 시도해주세요.`);
     } finally {
       setIsSyncing(false);
     }
-  }, [firebaseUser]);
+  }, [firebaseUser, dailyData, dataCache]);
 
   // ── Task 핸들러 ───────────────────────────────────────────────────────────
 
@@ -262,7 +334,7 @@ const App: React.FC = () => {
     const content = prompt('할 일을 입력하세요:');
     if (!content) return;
     const newTask: Task = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       content, type, timeSlot: slot, completed: false,
       date: dailyData.date, originalDate: dailyData.date, delayDays: 0, isArchived: false,
     };
