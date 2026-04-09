@@ -108,9 +108,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
     // Routine adherence
     const wakeAdherence = sorted.length === 0 ? 0
-      : Math.round((sorted.filter(d => d.wakeRoutine?.completed).length / sorted.length) * 100);
+      : Math.round((sorted.filter(d => d.wakeCompleted).length / sorted.length) * 100);
     const sleepAdherence = sorted.length === 0 ? 0
-      : Math.round((sorted.filter(d => d.sleepRoutine?.completed).length / sorted.length) * 100);
+      : Math.round((sorted.filter(d => d.sleepCompleted).length / sorted.length) * 100);
 
     return {
       dailyStats,
@@ -364,7 +364,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               />
             </div>
             <p className="text-[9px] text-slate-600 font-bold mt-1.5 uppercase">
-              {data.filter(d => d.wakeRoutine?.completed).length}/{data.length}일 완료
+              {data.filter(d => d.wakeCompleted).length}/{data.length}일 완료
             </p>
           </div>
           <div>
@@ -382,7 +382,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               />
             </div>
             <p className="text-[9px] text-slate-600 font-bold mt-1.5 uppercase">
-              {data.filter(d => d.sleepRoutine?.completed).length}/{data.length}일 완료
+              {data.filter(d => d.sleepCompleted).length}/{data.length}일 완료
             </p>
           </div>
         </div>
