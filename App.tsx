@@ -649,9 +649,8 @@ const App: React.FC = () => {
 
             {/* Priorities */}
             <section className="space-y-4">
-              <div className="flex items-center justify-between px-2">
+              <div className="px-2">
                 <h3 className="text-xl md:text-2xl font-black uppercase tracking-tight flex items-center gap-3"><Clock className="text-indigo-600" /> Priorities</h3>
-                <button onClick={() => addTask(TaskType.PRIORITY)} className="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-lg font-black text-xs shadow-lg hover:bg-indigo-700 hover:scale-110 active:scale-90 transition-all">P</button>
               </div>
               {dailyData.tasks.filter((t) => t.type === TaskType.PRIORITY).map((task) => (
                 <div key={task.id} onClick={() => updateTaskStatus(task.id)} className="flex items-center gap-4 p-5 bg-white border border-slate-100 rounded-[1.5rem] hover:shadow-xl transition-all cursor-pointer group shadow-lg">
@@ -667,9 +666,8 @@ const App: React.FC = () => {
 
             {/* Focus Goal */}
             <section className="space-y-4">
-              <div className="flex items-center justify-between px-2">
+              <div className="px-2">
                 <h3 className="text-xl md:text-2xl font-black uppercase tracking-tight flex items-center gap-3"><Target className="text-orange-500" /> Focus Goal</h3>
-                <button onClick={() => addTask(TaskType.GOAL)} className="bg-orange-500 text-white w-8 h-8 flex items-center justify-center rounded-lg font-black text-xs shadow-lg hover:bg-orange-600 hover:scale-110 active:scale-90 transition-all">G</button>
               </div>
               {dailyData.tasks.filter((t) => t.type === TaskType.GOAL).map((task) => (
                 <div key={task.id} onClick={() => updateTaskStatus(task.id)} className="flex items-center gap-4 p-5 bg-white border border-slate-100 rounded-[1.5rem] hover:shadow-xl transition-all cursor-pointer group shadow-lg">
