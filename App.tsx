@@ -611,7 +611,7 @@ const App: React.FC = () => {
                 </h3>
                 <span className="text-[10px] font-black text-slate-400 uppercase">Real-time Reactive Matrix</span>
               </div>
-              <div className="flex items-end justify-between h-48 gap-4 px-2">
+              <div className="flex items-end justify-between h-48 gap-4 px-2 pb-2">
                 {efficiencyData.map((stat, i) => (
                   <div key={i} className="flex-1 flex flex-col items-center gap-3 group relative">
                     <div className="flex flex-col items-center mb-1">
@@ -628,7 +628,7 @@ const App: React.FC = () => {
                         style={{ height: `${stat.percent || 2}%` }}
                       />
                     </div>
-                    <span className={`text-[8px] font-black uppercase tracking-wider ${i === 6 ? 'text-indigo-600' : 'text-slate-400'}`}>
+                    <span className={`text-[8px] font-black uppercase tracking-wider whitespace-nowrap ${i === 6 ? 'text-indigo-600' : 'text-slate-400'}`}>
                       {stat.date}
                     </span>
                   </div>
