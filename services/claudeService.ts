@@ -1,8 +1,8 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { DailyData } from "../types";
 
 /**
- * Claude API를 통한 성과 분석 리포트 생성 (Weekly / Monthly)
+ * Claude API (Fetch)를 통한 성과 분석 리포트 생성 (Weekly / Monthly)
+ * 브라우저 환경에서 직접 작동
  *
  * 사용 방법:
  * const report = await generateFeedback(weeklyData, "weekly");
@@ -12,19 +12,20 @@ export const generateFeedback = async (
   periodData: DailyData[],
   periodType: "weekly" | "monthly" = "monthly"
 ): Promise<string> => {
-  const apiKey = import.meta.env.VITE_CLAUDE_API_KEY || process.env.CLAUDE_API_KEY;
+  // Vite 환경 변수에서 API 키 읽기
+  const apiKey = import.meta.env.VITE_CLAUDE_API_KEY;
 
   if (!apiKey) {
     throw new Error(
-      "❌ Claude API 키가 설정되지 않았습니다.\n" +
-      "해결 방법:\n" +
+      "❌ Claude API 키가 설정되지 않았습니다.\n\n" +
+      "✅ 해결 방법:\n" +
       "1. Claude API 키 발급: https://console.anthropic.com/\n" +
-      "2. .env.local 파일에 VITE_CLAUDE_API_KEY=YOUR_API_KEY 추가\n" +
-      "3. 개발 서버 재시작: npm run dev"
+      "2. .env.local 파일에 다음 추가:\n   VITE_CLAUDE_API_KEY=sk-ant-...\n" +
+      "3. 개발 서버 재시작: npm run dev\n" +
+      "4. 캐시 초기화: Ctrl+Shift+K (DevTools) 또는 하드 새로고침"
     );
   }
 
-  const client = new Anthropic({ apiKey });
   const periodName = periodType === "weekly" ? "주간" : "월간";
 
   // 데이터 요약 계산
@@ -127,34 +128,64 @@ ${JSON.stringify(tasksByDate, null, 2)}
 `;
 
   try {
-    const message = await client.messages.create({
-      model: "claude-3-5-sonnet-20241022",
-      max_tokens: 2000,
-      system: systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: userPrompt,
-        },
-      ],
+    console.log("🚀 Claude API 호출 시작...");
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 2000,
+        system: systemPrompt,
+        messages: [
+          {
+            role: "user",
+            content: userPrompt,
+          },
+        ],
+      }),
     });
 
-    // Claude 응답 추출
-    const responseText = message.content
-      .filter((block) => block.type === "text")
-      .map((block) => (block as any).text)
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("❌ Claude API 에러:", response.status, errorData);
+      throw new Error(
+        `Claude API 오류 (${response.status}):\n${
+          errorData.error?.message || JSON.stringify(errorData)
+        }`
+      );
+    }
+
+    const data = await response.json();
+    console.log("✅ Claude API 응답 성공");
+
+    // Claude 응답에서 텍스트 추출
+    const responseText = data.content
+      ?.filter((block: any) => block.type === "text")
+      .map((block: any) => block.text)
       .join("\n");
+
+    if (!responseText) {
+      throw new Error("Claude API 응답에서 텍스트를 찾을 수 없습니다.");
+    }
 
     return responseText;
   } catch (error) {
-    console.error("Claude API Error:", error);
+    console.error("❌ 리포트 생성 중 오류:", error);
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `분석 리포트 생성 중 오류가 발생했습니다.\n\n` +
-      `오류: ${error instanceof Error ? error.message : "Unknown error"}\n\n` +
-      `해결 방법:\n` +
-      `1. API 키가 올바른지 확인\n` +
-      `2. Claude API 할당량 확인: https://console.anthropic.com/\n` +
-      `3. 개발자 콘솔에서 상세 오류 메시지 확인`
+      `리포트 생성에 실패했습니다.\n\n` +
+      `오류: ${errorMessage}\n\n` +
+      `📋 확인 사항:\n` +
+      `• Claude API 키가 올바른가? (sk-ant-로 시작)\n` +
+      `• .env.local에 VITE_CLAUDE_API_KEY가 설정되었는가?\n` +
+      `• 개발 서버를 재시작했는가? (npm run dev)\n` +
+      `• Claude API 할당량 확인: https://console.anthropic.com/`
     );
   }
 };
