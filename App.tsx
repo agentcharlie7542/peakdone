@@ -102,17 +102,53 @@ const App: React.FC = () => {
     return unsubscribe;
   }, [firebaseUser?.uid]);
 
-  // ── 3. 날짜별 데이터 실시간 구독 (onSnapshot) ────────────────────────────
+  // ── 3. 날짜별 데이터 실시간 구독 + 미완료 업무 자동 이월 ──────────────────
 
   useEffect(() => {
     if (!firebaseUser || !userProfile?.isOnboarded) return;
 
-    setDailyData(null); // 날짜 전환 시 로딩 표시
+    setDailyData(null);
 
-    const unsubscribe = subscribeToDailyData(firebaseUser.uid, currentDate, (data) => {
-      const resolved = data ?? emptyDay(currentDate);
-      setDailyData(resolved);
-      setDataCache((prev) => ({ ...prev, [currentDate]: resolved }));
+    const unsubscribe = subscribeToDailyData(firebaseUser.uid, currentDate, async (data) => {
+      // 오늘 데이터가 없으면 → 전날 미완료 태스크를 이월
+      if (!data) {
+        const yesterday = new Date(currentDate);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yStr = yesterday.toLocaleDateString('sv').split('T')[0];
+        const prevData = await getDailyData(firebaseUser.uid, yStr);
+
+        const carried: Task[] = [];
+        if (prevData) {
+          prevData.tasks
+            .filter((t) => !t.completed && !t.isArchived)
+            .forEach((t) => {
+              carried.push({
+                ...t,
+                id: Math.random().toString(36).substr(2, 9), // 새 ID
+                date: currentDate,
+                delayDays: (t.delayDays ?? 0) + 1,
+                delayed: true,
+                completed: false,
+              });
+            });
+        }
+
+        const newDay: DailyData = {
+          ...emptyDay(currentDate),
+          tasks: carried,
+        };
+
+        // 이월 태스크가 있으면 Firestore에 저장
+        if (carried.length > 0) {
+          await persistDailyData(firebaseUser.uid, newDay);
+        }
+
+        setDailyData(newDay);
+        setDataCache((prev) => ({ ...prev, [currentDate]: newDay }));
+      } else {
+        setDailyData(data);
+        setDataCache((prev) => ({ ...prev, [currentDate]: data }));
+      }
     });
 
     return unsubscribe;
@@ -620,11 +656,17 @@ const App: React.FC = () => {
                               className={`p-5 rounded-2xl border-2 flex items-center gap-4 cursor-pointer transition-all shadow-md group/item relative pr-12 ${task.completed ? 'bg-slate-50 border-slate-100 text-slate-400' : 'bg-white border-slate-100 text-slate-900 hover:border-indigo-400 hover:-translate-y-1'}`}
                             >
                               <div className="shrink-0">{task.completed ? <CheckCircle2 size={22} className="text-emerald-500" /> : <Circle size={22} className="text-slate-200" />}</div>
-                              <div className="flex-1">
-                                <span className={`font-black text-sm md:text-base ${task.completed ? 'line-through opacity-50' : ''}`}>{task.content}</span>
-                                {task.delayDays > 0 && <div className="text-[9px] font-black text-red-500 uppercase mt-1 tracking-tighter">Delay: +{task.delayDays}d</div>}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`font-black text-sm md:text-base ${task.completed ? 'line-through opacity-50' : ''}`}>{task.content}</span>
+                                  {task.delayDays > 0 && (
+                                    <span className="shrink-0 bg-red-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide">
+                                      +{task.delayDays}일 지연
+                                    </span>
+                                  )}
+                                </div>
                                 {task.type !== TaskType.SCHEDULE && (
-                                  <div className={`text-[8px] font-black uppercase mt-1 ${task.type === TaskType.PRIORITY ? 'text-indigo-600' : 'text-orange-500'}`}>{task.type}</div>
+                                  <div className={`text-[8px] font-black uppercase mt-0.5 ${task.type === TaskType.PRIORITY ? 'text-indigo-600' : 'text-orange-500'}`}>{task.type}</div>
                                 )}
                               </div>
                               <button onClick={(e) => deleteTask(task.id, e)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-200 hover:text-red-500 transition-colors opacity-0 group-hover/item:opacity-100">

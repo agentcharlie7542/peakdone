@@ -59,6 +59,13 @@ export const generateFeedback = async (
     day.tasks.filter((t) => t.delayed).map((t) => ({ date: day.date, task: t.content }))
   );
 
+  // 루틴 달성률
+  const wakeCompleted  = periodData.filter((d) => d.wakeCompleted).length;
+  const sleepCompleted = periodData.filter((d) => d.sleepCompleted).length;
+  const totalDays      = periodData.length;
+  const wakeRate       = totalDays > 0 ? Math.round((wakeCompleted  / totalDays) * 100) : 0;
+  const sleepRate      = totalDays > 0 ? Math.round((sleepCompleted / totalDays) * 100) : 0;
+
   const prompt = `
 당신은 세계 최고의 생산성 코치이자 성과 분석 전문가입니다.
 사용자의 업무 데이터를 깊이 있게 분석하여 전문적이고 영감을 주는 PeakDone 성과 리포트를 작성합니다.
@@ -68,6 +75,10 @@ export const generateFeedback = async (
 - 설정된 업무: ${totalTasks}건
 - 완료 업무: ${completedTasks}건 (완성율: ${completionRate}%)
 - 지연된 업무: ${delayedTasks.length}건
+
+[루틴 달성률]
+- 기상 루틴: ${wakeCompleted}/${totalDays}일 완료 (${wakeRate}%)
+- 취침 루틴: ${sleepCompleted}/${totalDays}일 완료 (${sleepRate}%)
 
 [카테고리별 성취도]
 ${Object.entries(tasksByCategory)
@@ -100,7 +111,12 @@ ${JSON.stringify(tasksByDate, null, 2)}
    - 우선순위 재정렬 방안
    - 집중력 유지 팁
 
-4. **🎯 황금 시간대 & 최적 업무 배치** (250자)
+4. **🌅 루틴 분석** (200자)
+   - 기상 루틴 ${wakeRate}%, 취침 루틴 ${sleepRate}% 달성에 대한 평가
+   - 루틴이 업무 완성율에 미친 영향 분석
+   - 루틴 개선 팁 1가지
+
+5. **🎯 황금 시간대 & 최적 업무 배치** (250자)
    - 당신의 최고 생산성 시간대는?
    - 이 시간에 우선순위가 높은 업무를 배치하는 구체적 방법
 
