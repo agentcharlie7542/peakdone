@@ -29,14 +29,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ── 색인 요청할 URL 목록 ────────────────────────────────────────────────────
 const URLS_TO_INDEX = [
-  'https://peakdone.app/',
-  'https://peakdone.app/en/',
-  'https://peakdone.app/timebox-planner',
-  'https://peakdone.app/en/timebox-planner',
-  'https://peakdone.app/blog/harvard-study-method',
-  'https://peakdone.app/blog/elon-musk-time-boxing',
-  'https://peakdone.app/en/blog/harvard-study-method',
-  'https://peakdone.app/en/blog/elon-musk-time-boxing',
+  'https://peakdone.com/',
+  'https://peakdone.com/en/',
+  'https://peakdone.com/timebox-planner',
+  'https://peakdone.com/en/timebox-planner',
+  'https://peakdone.com/blog/harvard-study-method',
+  'https://peakdone.com/blog/elon-musk-time-boxing',
+  'https://peakdone.com/en/blog/harvard-study-method',
+  'https://peakdone.com/en/blog/elon-musk-time-boxing',
 ];
 
 // ── 인증 ────────────────────────────────────────────────────────────────────

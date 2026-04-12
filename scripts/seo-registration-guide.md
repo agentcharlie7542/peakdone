@@ -1,27 +1,27 @@
 # PeakDone SEO 외부 등록 완전 가이드
 
-> **도메인**: `https://peakdone.app` (배포 후 실제 도메인으로 교체)
+> **도메인**: `https://peakdone.com` (배포 후 실제 도메인으로 교체)
 
 ---
 
 ## 1. Google Search Console 등록
 
 1. https://search.google.com/search-console 접속
-2. "URL 접두어" 방식으로 `https://peakdone.app/` 입력
+2. "URL 접두어" 방식으로 `https://peakdone.com/` 입력
 3. HTML 태그 인증 방법 선택 → 코드 복사
 4. `index.html`의 주석 처리된 부분에 코드 붙여넣기:
    ```html
    <meta name="google-site-verification" content="YOUR_CODE_HERE">
    ```
 5. 배포 후 "확인" 클릭
-6. 사이드바 → Sitemaps → `https://peakdone.app/sitemap.xml` 제출
+6. 사이드바 → Sitemaps → `https://peakdone.com/sitemap.xml` 제출
 
 ---
 
 ## 2. 네이버 서치어드바이저 등록
 
 1. https://searchadvisor.naver.com 접속 (네이버 계정 필요)
-2. "사이트 등록" → `https://peakdone.app/` 입력
+2. "사이트 등록" → `https://peakdone.com/` 입력
 3. **HTML 파일 업로드** 방식 선택
 4. 발급된 파일명으로 `public/` 폴더 안의 파일명 교체
 5. 배포 후 "소유 확인" 클릭
@@ -36,8 +36,8 @@
 ## 3. Bing Webmaster Tools 등록
 
 1. https://www.bing.com/webmasters 접속 (Microsoft 계정 필요)
-2. "사이트 추가" → `https://peakdone.app/`
-3. XML 사이트맵 방법으로 인증: `https://peakdone.app/sitemap.xml`
+2. "사이트 추가" → `https://peakdone.com/`
+3. XML 사이트맵 방법으로 인증: `https://peakdone.com/sitemap.xml`
    (Google Search Console 이미 연결되어 있으면 자동 Import 가능)
 4. `index.html`에 메타태그 추가:
    ```html
@@ -65,7 +65,7 @@ top performers structure their day. Features:
 
 Topics: Productivity, Time Management, AI, PWA
 Makers: [Your name]
-Website: https://peakdone.app/
+Website: https://peakdone.com/
 ```
 
 **최적 런칭 시간**: 화요일 오전 12:01 AM PST (미국 서부 기준)
@@ -122,7 +122,7 @@ PeakDone은 테슬라 CEO 엘론 머스크가 활용하는 타임박싱(Time Box
 ▶ PWA 오프라인 지원 — 앱 설치 없이 모바일·PC 모두 사용 가능
 ▶ 무료 제공 — Google 계정으로 로그인 시 전 기기 동기화
 
-서비스 주소: https://peakdone.app/
+서비스 주소: https://peakdone.com/
 
 문의: [이메일 주소]
 ```
@@ -140,7 +140,7 @@ AI-Powered 30-Minute Timebox App Helps Knowledge Workers Double Productivity
 
 [City, April 8, 2025] — PeakDone, a precision time boxing planner built on
 the scheduling principles used by Elon Musk and validated by Harvard cognitive
-science research, is now publicly available at https://peakdone.app/.
+science research, is now publicly available at https://peakdone.com/.
 
 Unlike traditional to-do apps, PeakDone assigns every task a specific 30-minute
 time block on a visual daily schedule. Incomplete tasks automatically carry over
@@ -158,6 +158,6 @@ Key Features:
 make it too complicated," said the PeakDone team. "We built PeakDone to make
 Elon Musk's 5-minute block system accessible to everyone in 30-minute chunks."
 
-Website: https://peakdone.app/
+Website: https://peakdone.com/
 Media Contact: [email]
 ```
