@@ -63,6 +63,7 @@ const App: React.FC = () => {
   // 자동 이월 중복 실행 방지 (isCarryingOver: 동시 실행, initializedDates: 날짜 당 1회 보장)
   const isCarryingOver   = React.useRef<boolean>(false);
   const initializedDates = React.useRef<Set<string>>(new Set());
+  const cleanedDates     = React.useRef<Set<string>>(new Set());
 
   // ── Drag-to-reschedule ────────────────────────────────────────────────────
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
@@ -279,8 +280,38 @@ const App: React.FC = () => {
           isCarryingOver.current = false;
         }
       } else {
-        setDailyData(data);
-        setDataCache((prev) => ({ ...prev, [currentDate]: data }));
+        // 기존 문서가 있어도, 아직 정리 안 된 delayed 태스크가 있을 수 있음
+        // (이전 버그로 미래 날짜에 완료된 태스크가 저장된 경우)
+        const delayedUncompleted = data.tasks.filter((t) => t.delayed && !t.completed);
+        if (delayedUncompleted.length > 0 && !cleanedDates.current.has(currentDate)) {
+          cleanedDates.current.add(currentDate);
+          try {
+            const recentHistory = await getDateRangeData(firebaseUser.uid, 14);
+            const everCompleted = new Set<string>();
+            recentHistory.forEach((day) => {
+              day.tasks.filter((t) => t.completed === true).forEach((t) => {
+                everCompleted.add(`${t.originalDate}|${t.content}|${t.type}`);
+              });
+            });
+            const cleanTasks = data.tasks.filter((t) => {
+              if (!t.delayed || t.completed) return true;
+              return !everCompleted.has(`${t.originalDate}|${t.content}|${t.type}`);
+            });
+            const cleanData = { ...data, tasks: cleanTasks };
+            if (cleanTasks.length < data.tasks.length) {
+              // Firestore 정리 (fire-and-forget)
+              persistDailyData(firebaseUser.uid, { ...cleanData, updatedAt: Date.now() });
+            }
+            setDailyData(cleanData);
+            setDataCache((prev) => ({ ...prev, [currentDate]: cleanData }));
+          } catch {
+            setDailyData(data);
+            setDataCache((prev) => ({ ...prev, [currentDate]: data }));
+          }
+        } else {
+          setDailyData(data);
+          setDataCache((prev) => ({ ...prev, [currentDate]: data }));
+        }
       }
     });
 
@@ -427,12 +458,39 @@ const App: React.FC = () => {
 
   // ── Task 핸들러 ───────────────────────────────────────────────────────────
 
+  // 완료/삭제된 태스크를 향후 7일 Firestore 문서에서 제거 (체인 이월 차단)
+  const cleanTaskFromFutureDates = useCallback(async (task: Task) => {
+    if (!firebaseUser) return;
+    const sig = `${task.originalDate}|${task.content}|${task.type}`;
+    for (let i = 1; i <= 7; i++) {
+      const d = new Date(currentDate);
+      d.setDate(d.getDate() + i);
+      const futureDate = d.toLocaleDateString('sv').split('T')[0];
+      try {
+        const futureData = await getDailyData(firebaseUser.uid, futureDate);
+        if (!futureData) continue;
+        const filtered = futureData.tasks.filter(
+          (t) => `${t.originalDate}|${t.content}|${t.type}` !== sig
+        );
+        if (filtered.length < futureData.tasks.length) {
+          await persistDailyData(firebaseUser.uid, { ...futureData, tasks: filtered, updatedAt: Date.now() });
+        }
+      } catch { /* 개별 날짜 실패는 무시 */ }
+    }
+  }, [firebaseUser, currentDate]);
+
   const updateTaskStatus = (taskId: string) => {
     if (!dailyData) return;
+    const task = dailyData.tasks.find((t) => t.id === taskId);
+    const nowCompleted = !task?.completed;
     saveDailyData({
       ...dailyData,
       tasks: dailyData.tasks.map((t) => t.id === taskId ? { ...t, completed: !t.completed } : t),
     });
+    // 이월 태스크를 완료하면 미래 날짜에서도 즉시 제거
+    if (task && nowCompleted && task.delayed) {
+      cleanTaskFromFutureDates(task);
+    }
   };
 
   const addTask = (type: TaskType, slot?: string) => {
@@ -450,7 +508,10 @@ const App: React.FC = () => {
   const deleteTask = (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!dailyData) return;
+    const task = dailyData.tasks.find((t) => t.id === taskId);
     saveDailyData({ ...dailyData, tasks: dailyData.tasks.filter((t) => t.id !== taskId) });
+    // 삭제된 태스크도 미래 날짜에서 제거
+    if (task) cleanTaskFromFutureDates(task);
   };
 
   const handleRoutineToggle = (type: 'wake' | 'sleep') => {
