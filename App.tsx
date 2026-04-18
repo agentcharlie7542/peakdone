@@ -61,9 +61,10 @@ const App: React.FC = () => {
   const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   // 자동 이월 중복 실행 방지 (isCarryingOver: 동시 실행, initializedDates: 날짜 당 1회 보장)
-  const isCarryingOver   = React.useRef<boolean>(false);
-  const initializedDates = React.useRef<Set<string>>(new Set());
-  const cleanedDates     = React.useRef<Set<string>>(new Set());
+  const isCarryingOver    = React.useRef<boolean>(false);
+  const initializedDates  = React.useRef<Set<string>>(new Set());
+  const cleanedDates      = React.useRef<Set<string>>(new Set());
+  const startupCleanedRef = React.useRef<boolean>(false);
 
   // ── Drag-to-reschedule ────────────────────────────────────────────────────
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
@@ -79,6 +80,50 @@ const App: React.FC = () => {
   useEffect(() => {
     getRedirectResult(auth).catch(() => {});
   }, []);
+
+  // ── Startup cleanup: 오늘 기준으로 미래 7일 stale 태스크 정리 ───────────────
+  // 오늘 데이터가 로드된 직후 1회 실행. 오늘 없는 delayed 태스크를 미래 날짜에서 제거.
+  useEffect(() => {
+    if (!firebaseUser || !dailyData || dailyData.date !== today()) return;
+    if (startupCleanedRef.current) return;
+    startupCleanedRef.current = true;
+
+    const run = async () => {
+      // 오늘 미완료 태스크 시그니처 (이것만 미래로 이월 허용)
+      const todayIncomplete = new Set<string>(
+        dailyData.tasks
+          .filter((t) => !t.completed && !t.isArchived)
+          .map((t) => `${t.originalDate}|${t.content}|${t.type}`)
+      );
+
+      for (let i = 1; i <= 7; i++) {
+        const d = new Date(dailyData.date);
+        d.setDate(d.getDate() + i);
+        const futureDate = d.toLocaleDateString('sv').split('T')[0];
+        try {
+          const futureData = await getDailyData(firebaseUser.uid, futureDate);
+          if (!futureData) continue;
+
+          const cleaned = futureData.tasks.filter((t) => {
+            if (!t.delayed || t.completed) return true; // 신규/완료 태스크는 유지
+            const sig = `${t.originalDate}|${t.content}|${t.type}`;
+            return todayIncomplete.has(sig); // 오늘 미완료 목록에 없으면 제거
+          });
+
+          if (cleaned.length < futureData.tasks.length) {
+            await persistDailyData(firebaseUser.uid, {
+              ...futureData,
+              tasks: cleaned,
+              updatedAt: Date.now(),
+            });
+            console.log(`🧹 ${futureDate}: ${futureData.tasks.length - cleaned.length}개 stale 태스크 정리됨`);
+          }
+        } catch { /* 개별 날짜 실패 무시 */ }
+      }
+    };
+
+    run();
+  }, [dailyData?.date, firebaseUser?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Drag-to-reschedule: document-level listeners ──────────────────────────
   useEffect(() => {
