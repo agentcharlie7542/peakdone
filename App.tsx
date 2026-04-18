@@ -82,22 +82,23 @@ const App: React.FC = () => {
   }, []);
 
   // ── Startup cleanup: 오늘 기준으로 미래 7일 stale 태스크 정리 ───────────────
-  // 오늘 데이터가 로드된 직후 1회 실행. 오늘 없는 delayed 태스크를 미래 날짜에서 제거.
+  // React state가 아닌 Firestore에서 직접 오늘 데이터를 읽어 사용 (race condition 방지)
   useEffect(() => {
     if (!firebaseUser || !dailyData || dailyData.date !== today()) return;
     if (startupCleanedRef.current) return;
     startupCleanedRef.current = true;
 
     const run = async () => {
-      // 오늘 미완료 태스크 시그니처 (이것만 미래로 이월 허용)
+      // Firestore에서 오늘 최신 데이터를 직접 읽음 (React state는 stale할 수 있음)
+      const freshToday = await getDailyData(firebaseUser.uid, today());
       const todayIncomplete = new Set<string>(
-        dailyData.tasks
+        (freshToday?.tasks ?? [])
           .filter((t) => !t.completed && !t.isArchived)
           .map((t) => `${t.originalDate}|${t.content}|${t.type}`)
       );
 
       for (let i = 1; i <= 7; i++) {
-        const d = new Date(dailyData.date);
+        const d = new Date(today());
         d.setDate(d.getDate() + i);
         const futureDate = d.toLocaleDateString('sv').split('T')[0];
         try {
@@ -105,23 +106,16 @@ const App: React.FC = () => {
           if (!futureData) continue;
 
           const cleaned = futureData.tasks.filter((t) => {
-            if (!t.delayed || t.completed) return true; // 신규/완료 태스크는 유지
-            const sig = `${t.originalDate}|${t.content}|${t.type}`;
-            return todayIncomplete.has(sig); // 오늘 미완료 목록에 없으면 제거
+            if (!t.delayed || t.completed) return true;
+            return todayIncomplete.has(`${t.originalDate}|${t.content}|${t.type}`);
           });
 
           if (cleaned.length < futureData.tasks.length) {
             if (cleaned.length === 0) {
-              // 문서를 완전히 삭제 → 미래 날짜 진입 시 carry-over가 새로 실행됨
               await deleteDailyData(firebaseUser.uid, futureDate);
             } else {
-              await persistDailyData(firebaseUser.uid, {
-                ...futureData,
-                tasks: cleaned,
-                updatedAt: Date.now(),
-              });
+              await persistDailyData(firebaseUser.uid, { ...futureData, tasks: cleaned, updatedAt: Date.now() });
             }
-            console.log(`🧹 ${futureDate}: ${futureData.tasks.length - cleaned.length}개 stale 태스크 정리됨`);
           }
         } catch { /* 개별 날짜 실패 무시 */ }
       }
@@ -330,30 +324,41 @@ const App: React.FC = () => {
           isCarryingOver.current = false;
         }
       } else {
-        // 기존 문서가 있어도, 아직 정리 안 된 delayed 태스크가 있을 수 있음
-        // (이전 버그로 미래 날짜에 완료된 태스크가 저장된 경우)
+        // 기존 문서 존재 — delayed 미완료 태스크가 있으면 오늘 기준으로 stale 여부 판단
         const delayedUncompleted = data.tasks.filter((t) => t.delayed && !t.completed);
         if (delayedUncompleted.length > 0 && !cleanedDates.current.has(currentDate)) {
           cleanedDates.current.add(currentDate);
           try {
-            const recentHistory = await getDateRangeData(firebaseUser.uid, 14);
-            const everCompleted = new Set<string>();
-            recentHistory.forEach((day) => {
-              day.tasks.filter((t) => t.completed === true).forEach((t) => {
-                everCompleted.add(`${t.originalDate}|${t.content}|${t.type}`);
-              });
-            });
+            const todayKey = today();
+            // 오늘 날짜가 아니면 Firestore에서 오늘 최신 데이터 직접 조회
+            // (완료 + 삭제 모두 반영된 진짜 기준값)
+            const todayData = currentDate === todayKey
+              ? data
+              : await getDailyData(firebaseUser.uid, todayKey);
+
+            const todayIncomplete = new Set<string>(
+              (todayData?.tasks ?? [])
+                .filter((t) => !t.completed && !t.isArchived)
+                .map((t) => `${t.originalDate}|${t.content}|${t.type}`)
+            );
+
             const cleanTasks = data.tasks.filter((t) => {
               if (!t.delayed || t.completed) return true;
-              return !everCompleted.has(`${t.originalDate}|${t.content}|${t.type}`);
+              // 오늘 미완료 목록에 없는 delayed 태스크는 stale → 제거
+              return todayIncomplete.has(`${t.originalDate}|${t.content}|${t.type}`);
             });
-            const cleanData = { ...data, tasks: cleanTasks };
+
             if (cleanTasks.length < data.tasks.length) {
-              // Firestore 정리 (fire-and-forget)
-              persistDailyData(firebaseUser.uid, { ...cleanData, updatedAt: Date.now() });
+              if (cleanTasks.length === 0) {
+                // 문서 전체 삭제 → snapshot null 발화 → 빈 날짜로 표시
+                await deleteDailyData(firebaseUser.uid, currentDate);
+                return;
+              }
+              await persistDailyData(firebaseUser.uid, { ...data, tasks: cleanTasks, updatedAt: Date.now() });
             }
-            setDailyData(cleanData);
-            setDataCache((prev) => ({ ...prev, [currentDate]: cleanData }));
+
+            setDailyData({ ...data, tasks: cleanTasks });
+            setDataCache((prev) => ({ ...prev, [currentDate]: { ...data, tasks: cleanTasks } }));
           } catch {
             setDailyData(data);
             setDataCache((prev) => ({ ...prev, [currentDate]: data }));
@@ -461,10 +466,15 @@ const App: React.FC = () => {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
     } catch (e: any) {
+      console.error('[Google Login Error]', e.code, e.message);
       if (e.code === 'auth/popup-blocked' || e.message?.includes('disallowed_useragent')) {
         setAuthError('인앱 브라우저에서는 Google 로그인이 차단됩니다. Chrome 또는 Safari로 열어주세요.');
-      } else if (e.code !== 'auth/popup-closed-by-user') {
-        setAuthError('Google 로그인에 실패했습니다. 다시 시도해주세요.');
+      } else if (e.code === 'auth/unauthorized-domain') {
+        setAuthError('이 도메인은 Google 로그인이 허용되지 않습니다. peakdone.com 또는 peakdone.web.app에서 접속해주세요.');
+      } else if (e.code === 'auth/cancelled-popup-request' || e.code === 'auth/popup-closed-by-user') {
+        // 사용자가 팝업 닫은 경우 - 에러 표시 안 함
+      } else {
+        setAuthError(`Google 로그인 오류: ${e.code ?? e.message}`);
       }
       setIsAuthLoading(false);
     }
