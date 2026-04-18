@@ -197,9 +197,7 @@ const App: React.FC = () => {
           yesterday.setDate(yesterday.getDate() - 1);
           const yStr = yesterday.toLocaleDateString('sv').split('T')[0];
 
-          const prevData = await getDailyData(firebaseUser.uid, yStr);
-
-          // 혹시 이월 실행 도중 오늘 문서가 이미 생성됐는지 재확인
+          // 오늘 문서가 이미 존재하면 이월 스킵
           const todayExists = await getDailyData(firebaseUser.uid, currentDate);
           if (todayExists) {
             setDailyData(todayExists);
@@ -207,19 +205,34 @@ const App: React.FC = () => {
             return;
           }
 
-          // delay_count = currentDate - originalDate (spec 기준)
+          // 과거 14일 데이터를 한 번에 조회해 "한 번이라도 완료된 태스크" 시그니처 수집
+          // → 체인 이월 차단: 중간 어느 날에 완료됐더라도 이후 날에는 이월되지 않음
+          const recentHistory = await getDateRangeData(firebaseUser.uid, 14);
+          const everCompleted = new Set<string>();
+          recentHistory.forEach((dayData) => {
+            dayData.tasks
+              .filter((t) => t.completed === true)
+              .forEach((t) => {
+                everCompleted.add(`${t.originalDate}|${t.content}|${t.type}`);
+              });
+          });
+
+          const prevData = await getDailyData(firebaseUser.uid, yStr);
+
+          // delay_count = currentDate - originalDate
           const msPerDay = 1000 * 60 * 60 * 24;
           const calcDelay = (originalDate: string) =>
-            Math.max(0, Math.round((new Date(currentDate).getTime() - new Date(originalDate).getTime()) / msPerDay));
+            Math.max(0, Math.round(
+              (new Date(currentDate).getTime() - new Date(originalDate).getTime()) / msPerDay
+            ));
 
           const carried: Task[] = [];
           if (prevData) {
-            // 완료되지 않은 태스크만 추출
             const incompletes = prevData.tasks.filter(
               (t) => t.completed !== true && !t.isArchived
             );
 
-            // 이전 버그로 중복된 태스크 제거: originalDate+content+type 기준 중복 제거
+            // 중복 제거 (originalDate+content+type 기준)
             const seen = new Set<string>();
             const deduped: Task[] = [];
             for (const t of incompletes) {
@@ -231,6 +244,10 @@ const App: React.FC = () => {
             }
 
             deduped.forEach((t) => {
+              const sig = `${t.originalDate}|${t.content}|${t.type}`;
+              // 과거 14일 중 어느 날에라도 완료된 태스크는 이월하지 않음
+              if (everCompleted.has(sig)) return;
+
               const delayDays = calcDelay(t.originalDate);
               carried.push({
                 ...t,
