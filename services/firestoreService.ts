@@ -1,7 +1,7 @@
 
 import { db } from './firebase';
 import {
-  doc, getDoc, setDoc, writeBatch,
+  doc, getDoc, setDoc, deleteDoc, writeBatch,
   onSnapshot,
 } from 'firebase/firestore';
 import { UserProfile, DailyData, RoutineConfig, LifeGoalMatrix } from '../types';
@@ -113,6 +113,10 @@ export const subscribeToDailyData = (
  * 기존 localStorage 데이터를 Firestore로 마이그레이션.
  * 완료 후 localStorage 항목 삭제.
  */
+export const deleteDailyData = async (uid: string, date: string): Promise<void> => {
+  await deleteDoc(doc(db, 'users', uid, 'dailyData', date));
+};
+
 export const migrateFromLocalStorage = async (uid: string, email: string): Promise<number> => {
   const prefix = `cloud_matrix_${email}_`;
   const keys = Object.keys(localStorage).filter((k) => k.startsWith(prefix));

@@ -4,7 +4,7 @@ import { User as FBUser, onAuthStateChanged, signInWithEmailAndPassword, createU
 import { auth } from './services/firebase';
 import {
   getUserProfile, createUserProfile, subscribeToUserProfile,
-  subscribeToDailyData, getDailyData, persistDailyData,
+  subscribeToDailyData, getDailyData, persistDailyData, deleteDailyData,
   migrateFromLocalStorage, getDateRangeData,
 } from './services/firestoreService';
 import { Layout }              from './components/Layout';
@@ -111,11 +111,16 @@ const App: React.FC = () => {
           });
 
           if (cleaned.length < futureData.tasks.length) {
-            await persistDailyData(firebaseUser.uid, {
-              ...futureData,
-              tasks: cleaned,
-              updatedAt: Date.now(),
-            });
+            if (cleaned.length === 0) {
+              // 문서를 완전히 삭제 → 미래 날짜 진입 시 carry-over가 새로 실행됨
+              await deleteDailyData(firebaseUser.uid, futureDate);
+            } else {
+              await persistDailyData(firebaseUser.uid, {
+                ...futureData,
+                tasks: cleaned,
+                updatedAt: Date.now(),
+              });
+            }
             console.log(`🧹 ${futureDate}: ${futureData.tasks.length - cleaned.length}개 stale 태스크 정리됨`);
           }
         } catch { /* 개별 날짜 실패 무시 */ }
@@ -518,7 +523,11 @@ const App: React.FC = () => {
           (t) => `${t.originalDate}|${t.content}|${t.type}` !== sig
         );
         if (filtered.length < futureData.tasks.length) {
-          await persistDailyData(firebaseUser.uid, { ...futureData, tasks: filtered, updatedAt: Date.now() });
+          if (filtered.length === 0) {
+            await deleteDailyData(firebaseUser.uid, futureDate);
+          } else {
+            await persistDailyData(firebaseUser.uid, { ...futureData, tasks: filtered, updatedAt: Date.now() });
+          }
         }
       } catch { /* 개별 날짜 실패는 무시 */ }
     }
