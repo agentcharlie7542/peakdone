@@ -1,15 +1,16 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { User as FBUser, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { User as FBUser, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from 'firebase/auth';
 import { auth } from './services/firebase';
 import {
   getUserProfile, createUserProfile, subscribeToUserProfile,
   subscribeToDailyData, getDailyData, persistDailyData,
   migrateFromLocalStorage, getDateRangeData,
 } from './services/firestoreService';
-import { Layout }           from './components/Layout';
-import { Dashboard }        from './components/Dashboard';
-import { OnboardingModal }  from './components/OnboardingModal';
+import { Layout }              from './components/Layout';
+import { Dashboard }           from './components/Dashboard';
+import { OnboardingModal }     from './components/OnboardingModal';
+import { GoogleCalendarSync }  from './components/GoogleCalendarSync';
 import { Task, TaskType, DailyData, UserProfile } from './types';
 import { TIME_SLOTS }       from './constants';
 import { generateMonthlyFeedback } from './services/geminiService';
@@ -17,7 +18,7 @@ import {
   CheckCircle2, Circle, ChevronLeft, ChevronRight, Clock,
   Plus, Trash2, TrendingUp, LayoutDashboard, Zap, Target,
   Loader2, Smartphone, Monitor, Sunrise, Moon, LogOut,
-  Lock, Mail, Cloud, Wifi, BarChart3, Edit2,
+  Lock, Mail, Cloud, Wifi, BarChart3, Edit2, GripVertical,
 } from 'lucide-react';
 
 type ViewMode = 'daily' | 'weekly' | 'monthly';
@@ -59,8 +60,65 @@ const App: React.FC = () => {
   const [authError,     setAuthError]     = useState('');
   const [isAuthLoading, setIsAuthLoading] = useState(false);
 
-  // 자동 이월 중복 실행 방지 플래그
-  const isCarryingOver = React.useRef<boolean>(false);
+  // 자동 이월 중복 실행 방지 (isCarryingOver: 동시 실행, initializedDates: 날짜 당 1회 보장)
+  const isCarryingOver   = React.useRef<boolean>(false);
+  const initializedDates = React.useRef<Set<string>>(new Set());
+
+  // ── Drag-to-reschedule ────────────────────────────────────────────────────
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+  const [dragOverSlot,   setDragOverSlot]   = useState<string | null>(null);
+  const dragRef = React.useRef<{
+    taskId: string; originSlot: string; currentSlot: string | null;
+    startY: number; moved: boolean;
+  } | null>(null);
+  const moveTaskSlotFn = React.useRef<(taskId: string, slot: string) => void>(() => {});
+
+  // ── 0. 모바일 redirect 로그인 결과 처리 ──────────────────────────────────
+
+  useEffect(() => {
+    getRedirectResult(auth).catch(() => {});
+  }, []);
+
+  // ── Drag-to-reschedule: document-level listeners ──────────────────────────
+  useEffect(() => {
+    if (!draggingTaskId) return;
+
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      const p = 'touches' in e ? (e as TouchEvent).touches[0] : e as MouseEvent;
+      const ds = dragRef.current;
+      if (!ds) return;
+      if (!ds.moved && Math.abs(p.clientY - ds.startY) > 6) ds.moved = true;
+      if (!ds.moved) return;
+      e.preventDefault();
+      const el = document.elementFromPoint(p.clientX, p.clientY);
+      const slot = el?.closest('[data-timeslot]')?.getAttribute('data-timeslot') ?? null;
+      if (slot && slot !== ds.currentSlot) {
+        ds.currentSlot = slot;
+        setDragOverSlot(slot);
+      }
+    };
+
+    const onEnd = () => {
+      const ds = dragRef.current;
+      if (ds?.moved && ds.currentSlot && ds.currentSlot !== ds.originSlot) {
+        moveTaskSlotFn.current(ds.taskId, ds.currentSlot);
+      }
+      dragRef.current = null;
+      setDraggingTaskId(null);
+      setDragOverSlot(null);
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('mouseup', onEnd);
+    document.addEventListener('touchend', onEnd);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('mouseup', onEnd);
+      document.removeEventListener('touchend', onEnd);
+    };
+  }, [draggingTaskId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── 1. Firebase Auth 상태 감지 ────────────────────────────────────────────
 
@@ -115,57 +173,88 @@ const App: React.FC = () => {
     isCarryingOver.current = false;
 
     const unsubscribe = subscribeToDailyData(firebaseUser.uid, currentDate, async (data) => {
-      // 오늘 데이터가 없으면 → 전날 미완료 태스크를 이월
       if (!data) {
-        // 이석 실행 중이면 스킵 (중복 이월 방지)
-        if (isCarryingOver.current) {
-          console.log('⏳ 자동 이월 이미 진행 중, 스킵');
+        // 오늘 날짜가 아니면 이월 실행 안 함
+        if (currentDate !== today()) {
+          const emptyNewDay = emptyDay(currentDate);
+          setDailyData(emptyNewDay);
+          setDataCache((prev) => ({ ...prev, [currentDate]: emptyNewDay }));
           return;
         }
 
-        isCarryingOver.current = true;
+        // 이 날짜는 이미 이 세션에서 초기화됨 → 중복 이월 완전 차단
+        if (initializedDates.current.has(currentDate)) return;
+
+        // 동시 실행 방지
+        if (isCarryingOver.current) return;
+
+        // 동기적으로 플래그 세팅 (await 이전에) → 이후 snapshot 발화 차단
+        isCarryingOver.current   = true;
+        initializedDates.current.add(currentDate);
 
         try {
           const yesterday = new Date(currentDate);
           yesterday.setDate(yesterday.getDate() - 1);
           const yStr = yesterday.toLocaleDateString('sv').split('T')[0];
 
-          console.log(`🔄 자동 이월 시작: ${yStr} → ${currentDate}`);
-
           const prevData = await getDailyData(firebaseUser.uid, yStr);
+
+          // 혹시 이월 실행 도중 오늘 문서가 이미 생성됐는지 재확인
+          const todayExists = await getDailyData(firebaseUser.uid, currentDate);
+          if (todayExists) {
+            setDailyData(todayExists);
+            setDataCache((prev) => ({ ...prev, [currentDate]: todayExists }));
+            return;
+          }
+
+          // delay_count = currentDate - originalDate (spec 기준)
+          const msPerDay = 1000 * 60 * 60 * 24;
+          const calcDelay = (originalDate: string) =>
+            Math.max(0, Math.round((new Date(currentDate).getTime() - new Date(originalDate).getTime()) / msPerDay));
 
           const carried: Task[] = [];
           if (prevData) {
-            prevData.tasks
-              .filter((t) => !t.completed && !t.isArchived)
-              .forEach((t) => {
-                carried.push({
-                  ...t,
-                  id: crypto.randomUUID(), // 강력한 UUID 사용
-                  date: currentDate,
-                  delayDays: (t.delayDays ?? 0) + 1,
-                  delayed: true,
-                  completed: false,
-                });
+            // 완료되지 않은 태스크만 추출
+            const incompletes = prevData.tasks.filter(
+              (t) => t.completed !== true && !t.isArchived
+            );
+
+            // 이전 버그로 중복된 태스크 제거: originalDate+content+type 기준 중복 제거
+            const seen = new Set<string>();
+            const deduped: Task[] = [];
+            for (const t of incompletes) {
+              const key = `${t.originalDate}|${t.content}|${t.type}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                deduped.push(t);
+              }
+            }
+
+            deduped.forEach((t) => {
+              const delayDays = calcDelay(t.originalDate);
+              carried.push({
+                ...t,
+                id: crypto.randomUUID(),
+                date: currentDate,
+                delayDays,
+                delayed: delayDays > 0,
+                completed: false,
               });
+            });
           }
 
-          const newDay: DailyData = {
-            ...emptyDay(currentDate),
-            tasks: carried,
-          };
+          const newDay: DailyData = { ...emptyDay(currentDate), tasks: carried };
 
-          // 이월 태스크가 있으면 Firestore에 저장
-          if (carried.length > 0) {
-            await persistDailyData(firebaseUser.uid, newDay);
-            console.log(`✅ 자동 이월 완료: ${carried.length}개 작업 이월됨`);
-          }
+          // 이월 태스크 유무 무관하게 항상 오늘 문서 생성 (반복 발화 방지)
+          await persistDailyData(firebaseUser.uid, newDay);
+          console.log(`✅ 자동 이월 완료: ${carried.length}개 이월`);
 
           setDailyData(newDay);
           setDataCache((prev) => ({ ...prev, [currentDate]: newDay }));
         } catch (error) {
-          console.error('❌ 자동 이월 중 에러:', error);
-          // 에러 발생 시 빈 날짜로 설정 (사용자가 수동으로 작업 추가 가능)
+          console.error('❌ 자동 이월 오류:', error);
+          // 실패 시 해당 날짜 플래그 제거 → 재시도 허용
+          initializedDates.current.delete(currentDate);
           const emptyNewDay = emptyDay(currentDate);
           setDailyData(emptyNewDay);
           setDataCache((prev) => ({ ...prev, [currentDate]: emptyNewDay }));
@@ -273,12 +362,12 @@ const App: React.FC = () => {
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
-      // onAuthStateChanged가 이후 처리
     } catch (e: any) {
-      if (e.code !== 'auth/popup-closed-by-user') {
+      if (e.code === 'auth/popup-blocked' || e.message?.includes('disallowed_useragent')) {
+        setAuthError('인앱 브라우저에서는 Google 로그인이 차단됩니다. Chrome 또는 Safari로 열어주세요.');
+      } else if (e.code !== 'auth/popup-closed-by-user') {
         setAuthError('Google 로그인에 실패했습니다. 다시 시도해주세요.');
       }
-    } finally {
       setIsAuthLoading(false);
     }
   };
@@ -354,6 +443,19 @@ const App: React.FC = () => {
         ? { ...dailyData, wakeCompleted: !dailyData.wakeCompleted }
         : { ...dailyData, sleepCompleted: !dailyData.sleepCompleted },
     );
+  };
+
+  const handleDragStart = (
+    e: React.MouseEvent | React.TouchEvent,
+    taskId: string,
+    originSlot: string,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+    dragRef.current = { taskId, originSlot, currentSlot: originSlot, startY: clientY, moved: false };
+    setDraggingTaskId(taskId);
+    setDragOverSlot(originSlot);
   };
 
   // ── Derived data for charts ───────────────────────────────────────────────
@@ -500,7 +602,7 @@ const App: React.FC = () => {
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
             </svg>
-            Google로 계속하기
+            Google ID Sync
           </button>
 
           <p className="mt-6 text-[9px] font-bold text-slate-300 uppercase leading-relaxed">
@@ -540,6 +642,15 @@ const App: React.FC = () => {
 
   const { wakeRoutine, sleepRoutine, lifeGoalMatrix } = userProfile;
 
+  // always-fresh move fn (reads latest dailyData / saveDailyData)
+  moveTaskSlotFn.current = (taskId: string, newSlot: string) => {
+    if (!dailyData) return;
+    saveDailyData({
+      ...dailyData,
+      tasks: dailyData.tasks.map((t: Task) => t.id === taskId ? { ...t, timeSlot: newSlot } : t),
+    });
+  };
+
   return (
     <Layout>
       {/* Header */}
@@ -551,19 +662,18 @@ const App: React.FC = () => {
             </div>
             <div>
               <h1 className="text-2xl md:text-4xl font-black tracking-tighter uppercase italic bg-gradient-to-r from-orange-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent">PeakDone</h1>
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-[8px] md:text-[10px] font-bold text-slate-400 tracking-[0.4em] uppercase">Matrix V3</p>
-                <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                  <Wifi size={10} className={`${isSyncing ? 'text-yellow-400' : 'text-emerald-400'}`} />
-                  <span className={`text-[8px] font-black uppercase ${isSyncing ? 'text-yellow-400' : 'text-emerald-400'}`}>
-                    {isSyncing ? 'Syncing...' : 'Live Sync'}
-                  </span>
-                </div>
+              <div className="mt-1">
+                <GoogleCalendarSync
+                  uid={firebaseUser.uid}
+                  isGoogleUser={firebaseUser.providerData.some(p => p.providerId === 'google.com')}
+                  tasks={dailyData?.tasks ?? []}
+                  currentDate={currentDate}
+                />
               </div>
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-3">
+          <div className="flex flex-col items-end gap-3">
             <div className="flex items-center gap-3">
               <div className="hidden md:flex flex-col items-end mr-2">
                 <span className="text-[9px] font-black text-slate-500 uppercase">Syncing as</span>
@@ -715,17 +825,40 @@ const App: React.FC = () => {
                 {/* Time Slots */}
                 {TIME_SLOTS.map((slot) => {
                   const tasksForSlot = dailyData.tasks.filter((t) => t.timeSlot === slot);
+                  const isDropTarget = draggingTaskId && dragOverSlot === slot;
                   return (
-                    <div key={slot} className="flex min-h-[44px] group/slot transition-colors hover:bg-white">
-                      <div className="w-20 shrink-0 px-2 py-1.5 text-[11px] font-black text-slate-400 border-r border-slate-50 flex items-center justify-center bg-white">{slot}</div>
+                    <div
+                      key={slot}
+                      data-timeslot={slot}
+                      className={`flex min-h-[44px] group/slot transition-colors ${isDropTarget ? 'bg-indigo-50 border-l-4 border-indigo-400' : 'hover:bg-white'}`}
+                    >
+                      <div className={`w-20 shrink-0 px-2 py-1.5 text-[11px] font-black border-r border-slate-50 flex items-center justify-center bg-white ${isDropTarget ? 'text-indigo-500' : 'text-slate-400'}`}>{slot}</div>
                       <div className="flex-1 px-3 py-1.5">
                         <div className="flex flex-col gap-3">
                           {tasksForSlot.map((task) => (
                             <div
-                              key={task.id} onClick={() => updateTaskStatus(task.id)}
-                              className={`p-5 rounded-2xl border-2 flex items-center gap-4 cursor-pointer transition-all shadow-md group/item relative pr-12 ${task.completed ? 'bg-slate-50 border-slate-100 text-slate-400' : 'bg-white border-slate-100 text-slate-900 hover:border-indigo-400 hover:-translate-y-1'}`}
+                              key={task.id}
+                              className={`p-5 rounded-2xl border-2 flex items-center gap-3 transition-all shadow-md group/item relative pr-12 select-none ${
+                                draggingTaskId === task.id
+                                  ? 'opacity-40 scale-95 border-indigo-300 bg-white'
+                                  : task.completed
+                                    ? 'bg-slate-50 border-slate-100 text-slate-400'
+                                    : 'bg-white border-slate-100 text-slate-900 hover:border-indigo-400 hover:-translate-y-1'
+                              }`}
                             >
-                              <div className="shrink-0">{task.completed ? <CheckCircle2 size={22} className="text-emerald-500" /> : <Circle size={22} className="text-slate-200" />}</div>
+                              {/* Drag grip */}
+                              <div
+                                onMouseDown={(e) => handleDragStart(e, task.id, task.timeSlot!)}
+                                onTouchStart={(e) => handleDragStart(e, task.id, task.timeSlot!)}
+                                className="shrink-0 cursor-grab active:cursor-grabbing text-slate-200 hover:text-indigo-400 transition-colors touch-none"
+                                title="드래그하여 시간 변경"
+                              >
+                                <GripVertical size={15} />
+                              </div>
+                              {/* Checkbox */}
+                              <div className="shrink-0 cursor-pointer" onClick={() => updateTaskStatus(task.id)}>
+                                {task.completed ? <CheckCircle2 size={22} className="text-emerald-500" /> : <Circle size={22} className="text-slate-200" />}
+                              </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className={`font-black text-sm md:text-base ${task.completed ? 'line-through opacity-50' : ''}`}>{task.content}</span>
