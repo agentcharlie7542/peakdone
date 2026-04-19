@@ -289,10 +289,10 @@ const App: React.FC = () => {
         // 기존 문서 존재
         const todayKey = today();
 
-        // ── [A] 오늘 이후 날짜 첫 로드: 전날 미완료 태스크 merge carry-over ──
-        // 날짜 이동 시 전날 데이터를 읽어서 미완료 태스크를 현재 문서에 합침
-        // (미래에 직접 일정 등록 + 이월 태스크 둘 다 표시)
-        if (currentDate >= todayKey && !mergedDates.current.has(currentDate)) {
+        // ── [A] 미래 날짜 첫 로드: 전날 미완료 태스크 merge carry-over ──
+        // 오늘 날짜 제외: 오늘은 사용자가 태스크를 추가 중일 수 있어 race condition 위험
+        // 미래 날짜만 안전하게 merge (전날 데이터 기준으로 빠진 이월 태스크 보충)
+        if (currentDate > todayKey && !mergedDates.current.has(currentDate)) {
           mergedDates.current.add(currentDate);
           try {
             const prevDate = new Date(currentDate);
@@ -307,9 +307,11 @@ const App: React.FC = () => {
                   (new Date(currentDate).getTime() - new Date(od).getTime()) / msPerDay
                 ));
 
-              // 오늘 문서에 이미 있는 태스크 시그니처
+              // 저장 직전 최신 문서를 재조회 (race condition 방지: 오래된 snapshot 데이터 덮어쓰기 차단)
+              const latestDoc = await getDailyData(firebaseUser.uid, currentDate);
+              const baseData = latestDoc ?? data;
               const existingSigs = new Set(
-                data.tasks.map((t) => `${t.originalDate}|${t.content}|${t.type}`)
+                baseData.tasks.map((t) => `${t.originalDate}|${t.content}|${t.type}`)
               );
 
               const toMerge: Task[] = [];
@@ -331,7 +333,7 @@ const App: React.FC = () => {
               }
 
               if (toMerge.length > 0) {
-                const merged = { ...data, tasks: [...data.tasks, ...toMerge], updatedAt: Date.now() };
+                const merged = { ...baseData, tasks: [...baseData.tasks, ...toMerge], updatedAt: Date.now() };
                 await persistDailyData(firebaseUser.uid, merged);
                 setDailyData(merged);
                 setDataCache((prev) => ({ ...prev, [currentDate]: merged }));
