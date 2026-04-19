@@ -65,7 +65,7 @@ const App: React.FC = () => {
   const initializedDates  = React.useRef<Set<string>>(new Set());
   const cleanedDates      = React.useRef<Set<string>>(new Set());
   const startupCleanedRef = React.useRef<boolean>(false);
-  const todayMergedRef    = React.useRef<boolean>(false);
+  const mergedDates       = React.useRef<Set<string>>(new Set());
 
   // ── Drag-to-reschedule ────────────────────────────────────────────────────
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
@@ -217,7 +217,6 @@ const App: React.FC = () => {
     setDailyData(null);
     // 날짜 변경 시 이월 플래그 초기화
     isCarryingOver.current = false;
-    todayMergedRef.current = false;
 
     const unsubscribe = subscribeToDailyData(firebaseUser.uid, currentDate, async (data) => {
       if (!data) {
@@ -290,11 +289,11 @@ const App: React.FC = () => {
         // 기존 문서 존재
         const todayKey = today();
 
-        // ── [A] 오늘 날짜이고 첫 로드인 경우: 전날 미완료 태스크 merge carry-over ──
-        // 미래 날짜에 직접 일정을 등록한 경우, 그 날이 오늘이 됐을 때
-        // 전날 미완료 태스크도 합쳐줘야 함
-        if (currentDate === todayKey && !todayMergedRef.current) {
-          todayMergedRef.current = true;
+        // ── [A] 오늘 이후 날짜 첫 로드: 전날 미완료 태스크 merge carry-over ──
+        // 날짜 이동 시 전날 데이터를 읽어서 미완료 태스크를 현재 문서에 합침
+        // (미래에 직접 일정 등록 + 이월 태스크 둘 다 표시)
+        if (currentDate >= todayKey && !mergedDates.current.has(currentDate)) {
+          mergedDates.current.add(currentDate);
           try {
             const prevDate = new Date(currentDate);
             prevDate.setDate(prevDate.getDate() - 1);
