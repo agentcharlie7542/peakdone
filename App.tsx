@@ -65,6 +65,7 @@ const App: React.FC = () => {
   const initializedDates  = React.useRef<Set<string>>(new Set());
   const cleanedDates      = React.useRef<Set<string>>(new Set());
   const startupCleanedRef = React.useRef<boolean>(false);
+  const todayMergedRef    = React.useRef<boolean>(false);
 
   // ── Drag-to-reschedule ────────────────────────────────────────────────────
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
@@ -216,6 +217,7 @@ const App: React.FC = () => {
     setDailyData(null);
     // 날짜 변경 시 이월 플래그 초기화
     isCarryingOver.current = false;
+    todayMergedRef.current = false;
 
     const unsubscribe = subscribeToDailyData(firebaseUser.uid, currentDate, async (data) => {
       if (!data) {
@@ -285,14 +287,66 @@ const App: React.FC = () => {
           isCarryingOver.current = false;
         }
       } else {
-        // 기존 문서 존재 — delayed 미완료 태스크가 있으면 오늘 기준으로 stale 여부 판단
+        // 기존 문서 존재
+        const todayKey = today();
+
+        // ── [A] 오늘 날짜이고 첫 로드인 경우: 전날 미완료 태스크 merge carry-over ──
+        // 미래 날짜에 직접 일정을 등록한 경우, 그 날이 오늘이 됐을 때
+        // 전날 미완료 태스크도 합쳐줘야 함
+        if (currentDate === todayKey && !todayMergedRef.current) {
+          todayMergedRef.current = true;
+          try {
+            const prevDate = new Date(currentDate);
+            prevDate.setDate(prevDate.getDate() - 1);
+            const prevStr = prevDate.toLocaleDateString('sv').split('T')[0];
+            const prevData = await getDailyData(firebaseUser.uid, prevStr);
+
+            if (prevData) {
+              const msPerDay = 1000 * 60 * 60 * 24;
+              const calcDelay = (od: string) =>
+                Math.max(0, Math.round(
+                  (new Date(currentDate).getTime() - new Date(od).getTime()) / msPerDay
+                ));
+
+              // 오늘 문서에 이미 있는 태스크 시그니처
+              const existingSigs = new Set(
+                data.tasks.map((t) => `${t.originalDate}|${t.content}|${t.type}`)
+              );
+
+              const toMerge: Task[] = [];
+              const seen = new Set<string>();
+              for (const t of prevData.tasks) {
+                if (t.completed === true || t.isArchived) continue;
+                const sig = `${t.originalDate}|${t.content}|${t.type}`;
+                if (existingSigs.has(sig) || seen.has(sig)) continue;
+                seen.add(sig);
+                const delayDays = calcDelay(t.originalDate);
+                toMerge.push({
+                  ...t,
+                  id: crypto.randomUUID(),
+                  date: currentDate,
+                  delayDays,
+                  delayed: true,
+                  completed: false,
+                });
+              }
+
+              if (toMerge.length > 0) {
+                const merged = { ...data, tasks: [...data.tasks, ...toMerge], updatedAt: Date.now() };
+                await persistDailyData(firebaseUser.uid, merged);
+                setDailyData(merged);
+                setDataCache((prev) => ({ ...prev, [currentDate]: merged }));
+                return;
+              }
+            }
+          } catch { /* ignore */ }
+        }
+
+        // ── [B] stale delayed 태스크 정리 (오늘 기준으로 없는 태스크 제거) ──
         const delayedUncompleted = data.tasks.filter((t) => t.delayed && !t.completed);
         if (delayedUncompleted.length > 0 && !cleanedDates.current.has(currentDate)) {
           cleanedDates.current.add(currentDate);
           try {
-            const todayKey = today();
-            // 오늘 날짜가 아니면 Firestore에서 오늘 최신 데이터 직접 조회
-            // (완료 + 삭제 모두 반영된 진짜 기준값)
             const todayData = currentDate === todayKey
               ? data
               : await getDailyData(firebaseUser.uid, todayKey);
@@ -305,13 +359,11 @@ const App: React.FC = () => {
 
             const cleanTasks = data.tasks.filter((t) => {
               if (!t.delayed || t.completed) return true;
-              // 오늘 미완료 목록에 없는 delayed 태스크는 stale → 제거
               return todayIncomplete.has(`${t.originalDate}|${t.content}|${t.type}`);
             });
 
             if (cleanTasks.length < data.tasks.length) {
               if (cleanTasks.length === 0) {
-                // 문서 전체 삭제 → snapshot null 발화 → 빈 날짜로 표시
                 await deleteDailyData(firebaseUser.uid, currentDate);
                 return;
               }
