@@ -219,52 +219,28 @@ const App: React.FC = () => {
 
     const unsubscribe = subscribeToDailyData(firebaseUser.uid, currentDate, async (data) => {
       if (!data) {
-        // 오늘 날짜가 아니면 이월 실행 안 함
-        if (currentDate !== today()) {
-          const emptyNewDay = emptyDay(currentDate);
-          setDailyData(emptyNewDay);
-          setDataCache((prev) => ({ ...prev, [currentDate]: emptyNewDay }));
-          return;
-        }
-
-        // 이 날짜는 이미 이 세션에서 초기화됨 → 중복 이월 완전 차단
+        // 중복 실행 방지
         if (initializedDates.current.has(currentDate)) return;
-
-        // 동시 실행 방지
         if (isCarryingOver.current) return;
 
-        // 동기적으로 플래그 세팅 (await 이전에) → 이후 snapshot 발화 차단
-        isCarryingOver.current   = true;
+        isCarryingOver.current = true;
         initializedDates.current.add(currentDate);
 
         try {
-          const yesterday = new Date(currentDate);
-          yesterday.setDate(yesterday.getDate() - 1);
-          const yStr = yesterday.toLocaleDateString('sv').split('T')[0];
-
-          // 오늘 문서가 이미 존재하면 이월 스킵
-          const todayExists = await getDailyData(firebaseUser.uid, currentDate);
-          if (todayExists) {
-            setDailyData(todayExists);
-            setDataCache((prev) => ({ ...prev, [currentDate]: todayExists }));
+          // snapshot이 write보다 먼저 발화되는 경우 방어
+          const currentExists = await getDailyData(firebaseUser.uid, currentDate);
+          if (currentExists) {
+            setDailyData(currentExists);
+            setDataCache((prev) => ({ ...prev, [currentDate]: currentExists }));
             return;
           }
 
-          // 과거 14일 데이터를 한 번에 조회해 "한 번이라도 완료된 태스크" 시그니처 수집
-          // → 체인 이월 차단: 중간 어느 날에 완료됐더라도 이후 날에는 이월되지 않음
-          const recentHistory = await getDateRangeData(firebaseUser.uid, 14);
-          const everCompleted = new Set<string>();
-          recentHistory.forEach((dayData) => {
-            dayData.tasks
-              .filter((t) => t.completed === true)
-              .forEach((t) => {
-                everCompleted.add(`${t.originalDate}|${t.content}|${t.type}`);
-              });
-          });
+          // 전날 데이터에서 미완료 태스크만 이월
+          const prevDate = new Date(currentDate);
+          prevDate.setDate(prevDate.getDate() - 1);
+          const prevStr = prevDate.toLocaleDateString('sv').split('T')[0];
+          const prevData = await getDailyData(firebaseUser.uid, prevStr);
 
-          const prevData = await getDailyData(firebaseUser.uid, yStr);
-
-          // delay_count = currentDate - originalDate
           const msPerDay = 1000 * 60 * 60 * 24;
           const calcDelay = (originalDate: string) =>
             Math.max(0, Math.round(
@@ -273,25 +249,14 @@ const App: React.FC = () => {
 
           const carried: Task[] = [];
           if (prevData) {
-            const incompletes = prevData.tasks.filter(
-              (t) => t.completed !== true && !t.isArchived
-            );
-
-            // 중복 제거 (originalDate+content+type 기준)
             const seen = new Set<string>();
-            const deduped: Task[] = [];
-            for (const t of incompletes) {
+            for (const t of prevData.tasks) {
+              // 완료됐거나 보관된 태스크는 이월하지 않음
+              if (t.completed === true || t.isArchived) continue;
+              // 중복 제거 (originalDate+content+type 기준)
               const key = `${t.originalDate}|${t.content}|${t.type}`;
-              if (!seen.has(key)) {
-                seen.add(key);
-                deduped.push(t);
-              }
-            }
-
-            deduped.forEach((t) => {
-              const sig = `${t.originalDate}|${t.content}|${t.type}`;
-              // 과거 14일 중 어느 날에라도 완료된 태스크는 이월하지 않음
-              if (everCompleted.has(sig)) return;
+              if (seen.has(key)) continue;
+              seen.add(key);
 
               const delayDays = calcDelay(t.originalDate);
               carried.push({
@@ -302,20 +267,16 @@ const App: React.FC = () => {
                 delayed: delayDays > 0,
                 completed: false,
               });
-            });
+            }
           }
 
           const newDay: DailyData = { ...emptyDay(currentDate), tasks: carried };
-
-          // 이월 태스크 유무 무관하게 항상 오늘 문서 생성 (반복 발화 방지)
           await persistDailyData(firebaseUser.uid, newDay);
-          console.log(`✅ 자동 이월 완료: ${carried.length}개 이월`);
 
           setDailyData(newDay);
           setDataCache((prev) => ({ ...prev, [currentDate]: newDay }));
         } catch (error) {
           console.error('❌ 자동 이월 오류:', error);
-          // 실패 시 해당 날짜 플래그 제거 → 재시도 허용
           initializedDates.current.delete(currentDate);
           const emptyNewDay = emptyDay(currentDate);
           setDailyData(emptyNewDay);
