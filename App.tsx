@@ -90,16 +90,54 @@ const App: React.FC = () => {
     startupCleanedRef.current = true;
 
     const run = async () => {
-      // Firestore에서 오늘 최신 데이터를 직접 읽음 (React state는 stale할 수 있음)
-      const freshToday = await getDailyData(firebaseUser.uid, today());
+      const todayKey = today();
+
+      // ── STEP 1: 오늘 문서에 전날 미완료 태스크 merge ──────────────────────
+      // 오늘 날짜가 미래였을 때 직접 일정 등록한 경우, 전날 이월 태스크가 빠져 있을 수 있음
+      // startup 시점에 1회만 실행하므로 race condition 없음
+      const freshToday = await getDailyData(firebaseUser.uid, todayKey);
+      if (freshToday) {
+        const prevDate = new Date(todayKey);
+        prevDate.setDate(prevDate.getDate() - 1);
+        const prevStr = prevDate.toLocaleDateString('sv').split('T')[0];
+        const prevData = await getDailyData(firebaseUser.uid, prevStr);
+
+        if (prevData) {
+          const msPerDay = 1000 * 60 * 60 * 24;
+          const calcDelay = (od: string) =>
+            Math.max(0, Math.round((new Date(todayKey).getTime() - new Date(od).getTime()) / msPerDay));
+          const existingSigs = new Set(
+            freshToday.tasks.map((t) => `${t.originalDate}|${t.content}|${t.type}`)
+          );
+          const toMerge: Task[] = [];
+          const seen = new Set<string>();
+          for (const t of prevData.tasks) {
+            if (t.completed === true || t.isArchived) continue;
+            const sig = `${t.originalDate}|${t.content}|${t.type}`;
+            if (existingSigs.has(sig) || seen.has(sig)) continue;
+            seen.add(sig);
+            const delayDays = calcDelay(t.originalDate);
+            toMerge.push({ ...t, id: crypto.randomUUID(), date: todayKey, delayDays, delayed: true, completed: false });
+          }
+          if (toMerge.length > 0) {
+            const merged = { ...freshToday, tasks: [...freshToday.tasks, ...toMerge], updatedAt: Date.now() };
+            await persistDailyData(firebaseUser.uid, merged);
+            setDailyData(merged);
+            setDataCache((prev) => ({ ...prev, [todayKey]: merged }));
+          }
+        }
+      }
+
+      // ── STEP 2: 미래 7일 stale 태스크 정리 ────────────────────────────────
+      const latestToday = await getDailyData(firebaseUser.uid, todayKey);
       const todayIncomplete = new Set<string>(
-        (freshToday?.tasks ?? [])
+        (latestToday?.tasks ?? [])
           .filter((t) => !t.completed && !t.isArchived)
           .map((t) => `${t.originalDate}|${t.content}|${t.type}`)
       );
 
       for (let i = 1; i <= 7; i++) {
-        const d = new Date(today());
+        const d = new Date(todayKey);
         d.setDate(d.getDate() + i);
         const futureDate = d.toLocaleDateString('sv').split('T')[0];
         try {
