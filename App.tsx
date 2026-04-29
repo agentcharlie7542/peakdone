@@ -5,7 +5,7 @@ import { auth } from './services/firebase';
 import {
   getUserProfile, createUserProfile, subscribeToUserProfile,
   subscribeToDailyData, getDailyData, persistDailyData, deleteDailyData,
-  migrateFromLocalStorage, getDateRangeData,
+  migrateFromLocalStorage, getDateRangeData, updateUserProfile,
 } from './services/firestoreService';
 import { Layout }              from './components/Layout';
 import { Dashboard }           from './components/Dashboard';
@@ -19,6 +19,7 @@ import {
   Plus, Trash2, TrendingUp, LayoutDashboard, Zap, Target,
   Loader2, Smartphone, Monitor, Sunrise, Moon, LogOut,
   Lock, Mail, Cloud, Wifi, BarChart3, Edit2, GripVertical,
+  Brain, Check, X as XIcon,
 } from 'lucide-react';
 
 type ViewMode = 'daily' | 'weekly' | 'monthly';
@@ -66,6 +67,14 @@ const App: React.FC = () => {
   const cleanedDates      = React.useRef<Set<string>>(new Set());
   const startupCleanedRef = React.useRef<boolean>(false);
   const mergedDates       = React.useRef<Set<string>>(new Set());
+
+  // ── Inline editing ────────────────────────────────────────────────────────
+  const [editingTaskId,   setEditingTaskId]   = useState<string | null>(null);
+  const [taskEditDraft,   setTaskEditDraft]   = useState('');
+  const [isEditingMatrix, setIsEditingMatrix] = useState(false);
+  const [matrixDraft,     setMatrixDraft]     = useState('');
+  const [brainDumpDraft,  setBrainDumpDraft]  = useState('');
+  const brainDumpSaveTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Drag-to-reschedule ────────────────────────────────────────────────────
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
@@ -630,6 +639,79 @@ const App: React.FC = () => {
     if (task) cleanTaskFromFutureDates(task);
   };
 
+  // ── 인라인 편집 핸들러 ────────────────────────────────────────────────────
+
+  const startEditTask = (taskId: string, content: string) => {
+    setEditingTaskId(taskId);
+    setTaskEditDraft(content);
+  };
+
+  const cancelEditTask = () => {
+    setEditingTaskId(null);
+    setTaskEditDraft('');
+  };
+
+  const commitEditTask = () => {
+    if (!dailyData || !editingTaskId) return;
+    const trimmed = taskEditDraft.trim();
+    if (!trimmed) { cancelEditTask(); return; }
+    saveDailyData({
+      ...dailyData,
+      tasks: dailyData.tasks.map((t) => t.id === editingTaskId ? { ...t, content: trimmed } : t),
+    });
+    cancelEditTask();
+  };
+
+  const startEditMatrix = (current: string) => {
+    setMatrixDraft(current);
+    setIsEditingMatrix(true);
+  };
+
+  const cancelEditMatrix = () => {
+    setIsEditingMatrix(false);
+    setMatrixDraft('');
+  };
+
+  const commitEditMatrix = async () => {
+    if (!firebaseUser) return;
+    try {
+      await updateUserProfile(firebaseUser.uid, { lifeGoalMatrix: { text: matrixDraft.trim() } });
+      // subscribeToUserProfile이 자동 반영
+    } catch (e) {
+      console.error('Life Goal Matrix 저장 실패:', e);
+      alert('⚠️ 목표 저장에 실패했습니다.');
+    } finally {
+      setIsEditingMatrix(false);
+    }
+  };
+
+  // 날짜 전환 시: 보류 중인 brain dump 저장을 즉시 flush 후 새 날짜의 값으로 교체
+  useEffect(() => {
+    if (brainDumpSaveTimer.current) {
+      clearTimeout(brainDumpSaveTimer.current);
+      brainDumpSaveTimer.current = null;
+    }
+    setBrainDumpDraft(dailyData?.brainDump ?? '');
+  }, [dailyData?.date]);
+
+  // 같은 날짜 내에서 외부 업데이트가 들어온 경우(다른 기기에서 동기화)
+  useEffect(() => {
+    if (brainDumpSaveTimer.current) return; // 사용자가 입력 중이면 덮어쓰지 않음
+    setBrainDumpDraft(dailyData?.brainDump ?? '');
+  }, [dailyData?.brainDump]);
+
+  const handleBrainDumpChange = (value: string) => {
+    setBrainDumpDraft(value);
+    if (!dailyData) return;
+    if (brainDumpSaveTimer.current) clearTimeout(brainDumpSaveTimer.current);
+    brainDumpSaveTimer.current = setTimeout(() => {
+      brainDumpSaveTimer.current = null;
+      if (!dailyData) return;
+      if ((dailyData.brainDump ?? '') === value) return;
+      saveDailyData({ ...dailyData, brainDump: value });
+    }, 600);
+  };
+
   const handleRoutineToggle = (type: 'wake' | 'sleep') => {
     if (!dailyData) return;
     saveDailyData(
@@ -945,10 +1027,71 @@ const App: React.FC = () => {
               <div className="absolute top-0 right-0 w-40 h-40 bg-indigo-500/10 blur-[80px] -mr-20 -mt-20" />
               <div className="flex items-center justify-between mb-4 relative z-10">
                 <h3 className="text-[8px] md:text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em]">Life Goal Matrix</h3>
+                {!isEditingMatrix && (
+                  <button
+                    onClick={() => startEditMatrix(lifeGoalMatrix.text)}
+                    className="text-indigo-300/60 hover:text-indigo-200 transition-colors opacity-0 group-hover:opacity-100"
+                    title="목표 수정"
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                )}
               </div>
-              <p className="text-lg md:text-2xl font-black leading-snug italic text-indigo-50 relative z-10">
-                "{lifeGoalMatrix.text || '목표를 설정하세요'}"
-              </p>
+              {isEditingMatrix ? (
+                <div className="relative z-10 space-y-3">
+                  <textarea
+                    autoFocus
+                    value={matrixDraft}
+                    onChange={(e) => setMatrixDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') { e.preventDefault(); cancelEditMatrix(); }
+                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commitEditMatrix(); }
+                    }}
+                    rows={3}
+                    placeholder="삶의 목표를 한 문장으로 적어보세요"
+                    className="w-full bg-slate-800/80 border-2 border-indigo-500/30 focus:border-indigo-400 outline-none rounded-2xl p-4 text-base md:text-xl font-black leading-snug italic text-indigo-50 placeholder:text-slate-500 resize-none"
+                  />
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      onClick={cancelEditMatrix}
+                      className="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all"
+                    >
+                      <XIcon size={12} /> 취소
+                    </button>
+                    <button
+                      onClick={commitEditMatrix}
+                      className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-white shadow-lg transition-all"
+                    >
+                      <Check size={12} /> 저장
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p
+                  onClick={() => startEditMatrix(lifeGoalMatrix.text)}
+                  className="text-lg md:text-2xl font-black leading-snug italic text-indigo-50 relative z-10 cursor-text"
+                  title="클릭하여 수정"
+                >
+                  "{lifeGoalMatrix.text || '목표를 설정하세요'}"
+                </p>
+              )}
+            </section>
+
+            {/* Brain Dump */}
+            <section className="bg-white p-6 md:p-8 rounded-[2rem] shadow-xl border border-slate-100">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl md:text-2xl font-black uppercase tracking-tight flex items-center gap-3">
+                  <Brain className="text-purple-500" /> Brain Dump
+                </h3>
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Today's Notes</span>
+              </div>
+              <textarea
+                value={brainDumpDraft}
+                onChange={(e) => handleBrainDumpChange(e.target.value)}
+                placeholder="떠오르는 생각, 아이디어, 메모를 자유롭게 적어보세요..."
+                rows={5}
+                className="w-full bg-slate-50 border-2 border-slate-100 focus:border-purple-400 outline-none rounded-2xl p-4 text-sm font-medium text-slate-700 placeholder:text-slate-300 resize-y leading-relaxed transition-all"
+              />
             </section>
 
             {/* Priorities */}
@@ -1054,21 +1197,47 @@ const App: React.FC = () => {
                                 {task.completed ? <CheckCircle2 size={22} className="text-emerald-500" /> : <Circle size={22} className="text-slate-200" />}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className={`font-black text-sm md:text-base ${task.completed ? 'line-through opacity-50' : ''}`}>{task.content}</span>
-                                  {task.delayDays > 0 && (
-                                    <span className="shrink-0 bg-red-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide">
-                                      +{task.delayDays}일 지연
-                                    </span>
-                                  )}
-                                </div>
-                                {task.type !== TaskType.SCHEDULE && (
+                                {editingTaskId === task.id ? (
+                                  <input
+                                    autoFocus
+                                    type="text"
+                                    value={taskEditDraft}
+                                    onChange={(e) => setTaskEditDraft(e.target.value)}
+                                    onBlur={commitEditTask}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') { e.preventDefault(); commitEditTask(); }
+                                      if (e.key === 'Escape') { e.preventDefault(); cancelEditTask(); }
+                                    }}
+                                    className="w-full font-black text-sm md:text-base bg-slate-50 border-2 border-indigo-300 focus:border-indigo-500 outline-none rounded-lg px-2 py-1 text-slate-900"
+                                  />
+                                ) : (
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`font-black text-sm md:text-base ${task.completed ? 'line-through opacity-50' : ''}`}>{task.content}</span>
+                                    {task.delayDays > 0 && (
+                                      <span className="shrink-0 bg-red-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide">
+                                        +{task.delayDays}일 지연
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                                {task.type !== TaskType.SCHEDULE && editingTaskId !== task.id && (
                                   <div className={`text-[8px] font-black uppercase mt-0.5 ${task.type === TaskType.PRIORITY ? 'text-indigo-600' : 'text-orange-500'}`}>{task.type}</div>
                                 )}
                               </div>
-                              <button onClick={(e) => deleteTask(task.id, e)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-200 hover:text-red-500 transition-colors opacity-0 group-hover/item:opacity-100">
-                                <Trash2 size={16} />
-                              </button>
+                              {editingTaskId !== task.id && (
+                                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover/item:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); startEditTask(task.id, task.content); }}
+                                    className="text-slate-200 hover:text-indigo-500 transition-colors p-1"
+                                    title="텍스트 수정"
+                                  >
+                                    <Edit2 size={15} />
+                                  </button>
+                                  <button onClick={(e) => deleteTask(task.id, e)} className="text-slate-200 hover:text-red-500 transition-colors p-1">
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           ))}
                           <div className="flex items-center gap-3 opacity-0 group-hover/slot:opacity-100 transition-all">

@@ -56,4 +56,5 @@ export interface DailyData {
   wakeCompleted: boolean;
   sleepCompleted: boolean;
   updatedAt: number;
+  brainDump?: string;
 }
