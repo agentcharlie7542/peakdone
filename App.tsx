@@ -336,10 +336,10 @@ const App: React.FC = () => {
         // 기존 문서 존재
         const todayKey = today();
 
-        // ── [A] 미래 날짜 첫 로드: 전날 미완료 태스크 merge carry-over ──
-        // 오늘 날짜 제외: 오늘은 사용자가 태스크를 추가 중일 수 있어 race condition 위험
-        // 미래 날짜만 안전하게 merge (전날 데이터 기준으로 빠진 이월 태스크 보충)
-        if (currentDate > todayKey && !mergedDates.current.has(currentDate)) {
+        // ── [A] 오늘/미래 날짜 첫 로드: 전날 미완료 태스크 merge carry-over ──
+        // 미리 생성된 미래 날짜 문서나, 자정 넘어 오늘이 된 시점에서도 빠진 이월 태스크 보충
+        // race condition 방어: 저장 직전 latestDoc 재조회 + signature 중복 제거 + session당 1회
+        if (currentDate >= todayKey && !mergedDates.current.has(currentDate)) {
           mergedDates.current.add(currentDate);
           try {
             const prevDate = new Date(currentDate);
